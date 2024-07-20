@@ -40,8 +40,8 @@ def fct_afs_wc_to_s3(**kwargs):
 
     response = requests.get(api_url, params=params)
 
-if response.status_code == 200:
-    response_text = response.text
+    if response.status_code == 200:
+        response_text = response.text
 
     if "#START7777" in response_text and "#7777END" in response_text:
         lines = response_text.splitlines()
