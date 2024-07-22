@@ -1,105 +1,110 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
+from airflow.hooks.postgres_hook import PostgresHook
 from datetime import datetime, timedelta
 import requests
-import boto3
 import csv
 from io import StringIO
 import pendulum
+import pandas as pd
+from psycopg2.extras import execute_values
+import logging
 
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
     'owner': 'airflow',
-    'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 21, 9, 0, 0, tzinfo=kst),
+    'depends_on_past': False,
+    'start_date': datetime(2024, 7, 21, 10, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
-
-def fct_afs_wl_to_s3(**kwargs):
+    
+def fct_afs_wl_to_s3(logical_date, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/fct_afs_wl.php"
     api_key = "HGbLr74hS2qmy6--ITtqog"
+    
+    logical_date_kst = logical_date.in_timezone(kst)
+    
+    one_hour_before = logical_date_kst - timedelta(hours=1)
+    tmfc1 = one_hour_before.strftime('%Y%m%d%H')
+    
+    tmfc2 = one_hour_before.strftime('%Y%m%d%H')
 
     params = {
     'stn': '',
     'reg': '',
     'tmfc': '',
-    'tmfc1': '2024070106',
-    'tmfc2': '2024071518',
+    'tmfc1': tmfc1,
+    'tmfc2': tmfc2,
     'tmef1': '',
     'tmef2': '',
     'mode': 0,
     'disp': 1,
     'help': 0,
     'authKey': api_key
-}
+    }
 
     response = requests.get(api_url, params=params)
 
     if response.status_code == 200:
         response_text = response.text
 
-    if "#START7777" in response_text and "#7777END" in response_text:
-        lines = response_text.splitlines()
-        area_data = []
+        if "#START7777" in response_text and "#7777END" in response_text:
+            lines = response_text.splitlines()
+            data = []
 
-        start_index = 0
-        for i, line in enumerate(lines):
-            if line.startswith('# REG_ID'):
-                start_index = i + 1
-                break
-
-        for line in lines[start_index:]:
-            if line.strip():
-                if line.startswith('#7777END'):
+            start_index = 0
+            for i, line in enumerate(lines):
+                if line.startswith('# REG_ID'):
+                    start_index = i + 1
                     break
-                columns = line.split(',')
-                columns = [col.strip() for col in columns if col.strip()]  
 
-                if columns[-1] == '=':
-                    columns = columns[:-1]
+            for line in lines[start_index:]:
+                if line.strip() and not line.startswith('#7777END'):
+                    columns = line.split(',')
+                    columns = [col.strip() for col in columns if col.strip()]  
 
-                
-                if len(columns) < 12:
-                    columns += [None] * (12 - len(columns))
+                    if columns[-1] == '=':
+                        columns = columns[:-1]
 
-                try:
-                    reg_id = columns[0]
-                    tm_fc = datetime.strptime(columns[1], '%Y%m%d%H%M') if columns[1] else None
-                    tm_ef = datetime.strptime(columns[2], '%Y%m%d%H%M') if columns[2] else None
-                    mod = columns[3]
-                    stn = columns[4]
-                    c = columns[5]
-                    min_val = columns[6]
-                    max_val = columns[7]
-                    min_l = columns[8]
-                    min_h = columns[9]
-                    max_l = columns[10]
-                    max_h = columns[11]
-                    area_data.append((reg_id, tm_fc, tm_ef, mod, stn, c, min_val, max_val, min_l, min_h, max_l, max_h))
-                except ValueError as e:
-                    print(f"WARN: 잘못된 날짜 형식 - {line}")
+                    if len(columns) < 12:
+                        columns += [None] * (12 - len(columns))
+
+                    try:
+                        reg_id = columns[0]
+                        tm_st = datetime.strptime(columns[1], '%Y%m%d%H%M') if columns[1] else None
+                        tm_ed = datetime.strptime(columns[2], '%Y%m%d%H%M') if columns[2] else None
+                        mod = columns[3]
+                        stn = columns[4]
+                        c = columns[5]
+                        sky = columns[6]
+                        pre = columns[7]
+                        conf = columns[8]
+                        wf = columns[9]
+                        rn_st = columns[10]
+                        data.append((reg_id, tm_st, tm_ed, mod, stn, c, sky, pre, conf, wf, rn_st))
+                    except ValueError as e:
+                        print(f"WARN: 잘못된 날짜 형식 - {line}")
             
-            if area_data:
-                # s3 버킷 디렉토리 생성 기준을 tm_st 기준으로
-                max_tm_st = max(area_data, key=lambda x: x[1])[1]
+            if data:
+                df = pd.DataFrame(data, columns=['REG_ID', 'TM_ST', 'TM_ED', 'MODE_KEY', 'STN_ID', 'CNT_CD', 'WF_SKY_CD', 'WF_PRE_CD', 'CONF_LV', 'WF_INFO', 'RN_ST'])
+
+                max_tm_st = max(data, key=lambda x: x[1])[1]
                 year = max_tm_st.strftime('%Y')
                 month = max_tm_st.strftime('%m')
                 day = max_tm_st.strftime('%d')
                 formatted_date = max_tm_st.strftime('%Y_%m_%d')
 
-                csv_buffer = StringIO()
-                csv_writer = csv.writer(csv_buffer)
-                csv_writer.writerow(['REG_ID','TM_ST','TM_ED','MODE_KEY','STN_ID','CNT_CD','WF_SKY_CD','WF_PRE_CD','CONF_LV','WF_INFO','RN_ST'])
-                csv_writer.writerows(area_data)
-                
                 s3_hook = S3Hook(aws_conn_id='AWS_S3')
                 bucket_name = 'team-okky-1-bucket'
                 s3_key = f'fct_afs_wl/{year}/{month}/{day}/{formatted_date}_fct_afs_wl.csv'
+                
+                csv_buffer = StringIO()
+                df.to_csv(csv_buffer, index=False, chunksize=100000)
                 
                 try:
                     s3_hook.load_string(
@@ -108,7 +113,8 @@ def fct_afs_wl_to_s3(**kwargs):
                         bucket_name=bucket_name,
                         replace=True
                     )
-                    print("저장성공")
+                    print(f"저장성공 첫 번째 데이터 행: {data[0]}")
+                    kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
                 except Exception as e:
                     print(f"S3 업로드 실패: {e}")
                     raise ValueError(f"S3 업로드 실패: {e}")
@@ -124,18 +130,74 @@ def fct_afs_wl_to_s3(**kwargs):
         print("메세지:", response.text)
         raise ValueError(f"응답코드오류: {response.status_code}, 메세지: {response.text}")
 
+def fct_afs_wl_to_redshift(**kwargs):
+    logging.info("redshift 적재 시작")
+    s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_afs_wl_to_s3', key='s3_key')
+    s3_path = f's3://team-okky-1-bucket/{s3_key}'
+    s3_hook = S3Hook(aws_conn_id='AWS_S3')
+    redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
+    logical_date = kwargs['logical_date'].in_timezone(kst)
+    
+    csv_content = s3_hook.read_key(key=s3_key, bucket_name='team-okky-1-bucket')
+    logging.info(f"S3 경로: {s3_key}")
+    
+    csv_reader = csv.reader(StringIO(csv_content))
+    header = next(csv_reader)  # Skip 헤더
+    
+    area_data = []
+    for row in csv_reader:
+        try:
+            reg_id, tm_st, tm_ed, mood_key, stn_id, cnt_cd, wf_sky_cd, wf_pre_cd, conf_lv, wf_info, rn_st = row
+            tm_st = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
+            tm_ed = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
+            area_data.append((reg_id, tm_st, tm_ed, mood_key, stn_id, cnt_cd, wf_sky_cd, wf_pre_cd, conf_lv, wf_info, rn_st, logical_date, tm_st, tm_st))
+        except ValueError as e:
+            logging.warning(f"ERROR : 파싱오류: {row}, error: {e}")
+            
+    if area_data:
+        logging.info(f"{len(area_data)} rows 데이터를 읽었습니다.")
+        conn = redshift_hook.get_conn()
+        cursor = conn.cursor()
+
+        # Redshift에 삽입할 SQL 쿼리 작성
+        insert_query = """
+            INSERT INTO raw_data.fct_afs_wl_info (REG_ID, TM_ST, TM_ED, MODE_KEY, STN_ID, CNT_CD, WF_SKY_CD, WF_PRE_CD, CONF_LV, WF_INFO, RN_ST, DATA_KEY, CREATED_AT, UPDATED_AT)
+            VALUES %s;
+        """
+        
+        try:
+            execute_values(cursor, insert_query, area_data)
+            conn.commit()
+            logging.info(f"Redshift 적재 완료: {s3_path}")
+        except Exception as e:
+            raise ValueError(f"Redshift 로드 실패: {e}")
+    else:
+        logging.error("ERROR : 적재할 데이터가 없습니다.")
+        raise ValueError("ERROR : 적재할 데이터가 없습니다.")
+    
+
 with DAG(
-    'fct_afs_wl_to_s3',
+    'fct_afs_wl_to_s3_redshift',
     default_args=default_args,
-    description='fct_afs_wl upload to S3',
-    schedule_interval='0 9 * * *',
-    catchup=False,
+    description='fct_afs_wl upload to S3 and Redshift',
+    schedule_interval='0 10,19 * * *',
+    catchup=True,
+    dagrun_timeout=timedelta(hours=2)
 ) as dag:
     dag.timezone = kst
     
     fct_afs_wl_to_s3_task = PythonOperator(
         task_id='fct_afs_wl_to_s3',
         python_callable=fct_afs_wl_to_s3,
+        provide_context=True,
+        execution_timeout=timedelta(hours=1),
+    )
+    
+    fct_afs_wl_to_redshift_task = PythonOperator(
+        task_id='fct_afs_wl_to_redshift',
+        python_callable=fct_afs_wl_to_redshift,
+        provide_context=True,
+        execution_timeout=timedelta(hours=1),
     )
 
-    fct_afs_wl_to_s3_task
+    fct_afs_wl_to_s3_task >> fct_afs_wl_to_redshift_task
