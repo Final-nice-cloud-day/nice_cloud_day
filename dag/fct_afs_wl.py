@@ -94,11 +94,10 @@ def fct_afs_wl_to_s3(logical_date, **kwargs):
             if data:
                 df = pd.DataFrame(data, columns=['REG_ID', 'TM_ST', 'TM_ED', 'MODE_KEY', 'STN_ID', 'CNT_CD', 'WF_SKY_CD', 'WF_PRE_CD', 'CONF_LV', 'WF_INFO', 'RN_ST'])
 
-                max_tm_st = max(data, key=lambda x: x[1])[1]
-                year = max_tm_st.strftime('%Y')
-                month = max_tm_st.strftime('%m')
-                day = max_tm_st.strftime('%d')
-                formatted_date = max_tm_st.strftime('%Y_%m_%d')
+                year = tm_st.strftime('%Y')
+                month = tm_st.strftime('%m')
+                day = tm_st.strftime('%d')
+                formatted_date = tm_st.strftime('%Y_%m_%d')
 
                 s3_hook = S3Hook(aws_conn_id='AWS_S3')
                 bucket_name = 'team-okky-1-bucket'

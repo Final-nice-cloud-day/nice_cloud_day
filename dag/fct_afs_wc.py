@@ -95,41 +95,40 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
                     except ValueError as e:
                         logging.warning(f"행을 파싱하는 중 오류 발생: {e}")
                 
-                if data:
-                    # s3 버킷 디렉토리 생성 기준을 tm_st 기준으로
-                    max_tm_st = max(data, key=lambda x: x[1])[1]
-                    year = max_tm_st.strftime('%Y')
-                    month = max_tm_st.strftime('%m')
-                    day = max_tm_st.strftime('%d')
-                    formatted_date = max_tm_st.strftime('%Y_%m_%d')
+            if data:
+                # s3 버킷 디렉토리 생성 기준을 tm_fc 기준으로
+                year = tm_fc.strftime('%Y')
+                month = tm_fc.strftime('%m')
+                day = tm_fc.strftime('%d')
+                formatted_date = tm_fc.strftime('%Y_%m_%d')
 
-                    csv_buffer = StringIO()
-                    csv_writer = csv.writer(csv_buffer)
-                    csv_writer.writerow(['REG_ID','TM_FC','TM_EF','MODE_KEY','STN_ID','CNT_CD','MIN_TA','MAX_TA','MIN_L_TA','MIN_H_TA','MAX_L_TA','MAX_H_TA'])
-                    csv_writer.writerows(data)
-                    
-                    s3_hook = S3Hook(aws_conn_id='AWS_S3')
-                    bucket_name = 'team-okky-1-bucket'
-                    s3_key = f'fct_afs_wc/{year}/{month}/{day}/{formatted_date}_fct_afs_wc.csv'
-                    
-                    try:
-                        s3_hook.load_string(
-                            csv_buffer.getvalue(),
-                            key=s3_key,
-                            bucket_name=bucket_name,
-                            replace=True
-                        )
-                        logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
-                        kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
-                    except Exception as e:
-                        logging.error(f"S3 업로드 실패: {e}")
-                        raise ValueError(f"S3 업로드 실패: {e}")
-                else:
-                    logging.error("ERROR : 유효한 데이터가 없어 삽입할 수 없습니다.")
-                    raise ValueError("ERROR : 유효한 데이터가 없어 삽입할 수 없습니다.")
+                csv_buffer = StringIO()
+                csv_writer = csv.writer(csv_buffer)
+                csv_writer.writerow(['REG_ID','TM_FC','TM_EF','MODE_KEY','STN_ID','CNT_CD','MIN_TA','MAX_TA','MIN_L_TA','MIN_H_TA','MAX_L_TA','MAX_H_TA'])
+                csv_writer.writerows(data)
+                
+                s3_hook = S3Hook(aws_conn_id='AWS_S3')
+                bucket_name = 'team-okky-1-bucket'
+                s3_key = f'fct_afs_wc/{year}/{month}/{day}/{formatted_date}_fct_afs_wc.csv'
+                
+                try:
+                    s3_hook.load_string(
+                        csv_buffer.getvalue(),
+                        key=s3_key,
+                        bucket_name=bucket_name,
+                        replace=True
+                    )
+                    logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
+                    kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
+                except Exception as e:
+                    logging.error(f"S3 업로드 실패: {e}")
+                    raise ValueError(f"S3 업로드 실패: {e}")
             else:
-                logging.error("ERROR : 데이터 수신 실패", response_text)
-                raise ValueError(f"ERROR : 데이터 수신 실패 : {response_text}")
+                logging.error("ERROR : 유효한 데이터가 없어 삽입할 수 없습니다.")
+                raise ValueError("ERROR : 유효한 데이터가 없어 삽입할 수 없습니다.")
+        else:
+            logging.error("ERROR : 데이터 수신 실패", response_text)
+            raise ValueError(f"ERROR : 데이터 수신 실패 : {response_text}")
     else:
         logging.error(f"ERROR : 응답 코드 오류 {response.status_code}")
         logging.error(f"ERROR : 메세지 :", response.text)
