@@ -1,6 +1,7 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from datetime import datetime, timedelta
 import pandas as pd
 from io import StringIO
@@ -76,6 +77,9 @@ def fct_shrt_reg_to_s3(**kwargs):
     except Exception as err:
         logging.error(f"Other error occurred: {err}")
         raise
+        
+    df['TM_ST'] = pd.to_datetime(df['TM_ST'], format='%Y%m%d%H%M')
+    df['TM_ED'] = pd.to_datetime(df['TM_ED'], format='%Y%m%d%H%M')
 
     csv_buffer = StringIO()
     df.to_csv(csv_buffer, index=False)
@@ -96,6 +100,31 @@ def fct_shrt_reg_to_s3(**kwargs):
     except Exception as e:
         logging.error(f"파일 업로드 실패 (경로 : {s3_file_path}): {e}")
 
+    # Redshift 연결 설정
+    redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
+    conn = redshift_hook.get_conn()
+    cursor = conn.cursor()
+
+    copy_sql = f"""
+        COPY raw_data.WH_FCT_SHRT_REG_LIST
+        FROM 's3://team-okky-1-bucket/{s3_folder_path}/fct_shrt_reg_info_{current_time}.csv'
+        IAM_ROLE 'arn:aws:iam::862327261051:role/service-role/AmazonRedshift-CommandsAccessRole-20240716T180249'
+        CSV
+        IGNOREHEADER 1
+        DATEFORMAT 'auto'
+        TIMEFORMAT 'auto';
+    """
+
+    try:
+        cursor.execute(copy_sql)
+        conn.commit()
+        logging.info(f"데이터 적재 성공 'WH_FCT_SHRT_REG_LIST'.")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"데이터 적재 실패: {e}")
+    finally:
+        cursor.close()
+        conn.close()
 
 default_args = {
     'owner': 'airflow',
@@ -105,9 +134,9 @@ default_args = {
 }
 
 dag = DAG(
-    'fct_shrt_reg_to_s3',
+    'fct_shrt_reg_to_s3_last_v3',
     default_args=default_args,
-    description='단기 예보구역 fct_shrt_reg_to_s3',
+    description='단기 예보구역 fct_shrt_reg_to_s3 // S3 to Redshift',
     schedule_interval='0 21,3,9 * * *',  # UTC 기준, KST로는 6시, 12시, 18시
     catchup=True
 )

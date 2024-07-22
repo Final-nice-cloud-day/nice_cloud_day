@@ -79,6 +79,9 @@ def fct_afs_dl_to_s3(**kwargs):
         logging.error(f"Other error occurred: {err}")
         raise
 
+    df['TM_FC'] = pd.to_datetime(df['TM_FC'], format='%Y%m%d%H%M')
+    df['TM_EF'] = pd.to_datetime(df['TM_EF'], format='%Y%m%d%H%M')
+
     csv_buffer = StringIO()
     df.to_csv(csv_buffer, index=False)
 
@@ -98,33 +101,31 @@ def fct_afs_dl_to_s3(**kwargs):
     except Exception as e:
         logging.error(f"파일 업로드 실패 (경로 : {s3_file_path}): {e}")
 
-    # # Redshift 연결 설정
-    # redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
-    # conn = redshift_hook.get_conn()
-    # cursor = conn.cursor()
+    # Redshift 연결 설정
+    redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
+    conn = redshift_hook.get_conn()
+    cursor = conn.cursor()
 
-    # iam_role = Variable.get("iam_role")
+    copy_sql = f"""
+        COPY raw_data.WH_FCT_AFS_DL_INFO
+        FROM 's3://team-okky-1-bucket/{s3_folder_path}/fct_afs_dl_{current_time}.csv'
+        IAM_ROLE 'arn:aws:iam::862327261051:role/service-role/AmazonRedshift-CommandsAccessRole-20240716T180249'
+        CSV
+        IGNOREHEADER 1
+        DATEFORMAT 'auto'
+        TIMEFORMAT 'auto';
+    """
 
-    # copy_sql = f"""
-    #     COPY raw_data.WH_FCT_AFS_DL_INFO
-    #     FROM 's3://team-okky-1-bucket/{s3_folder_path}/weather_data_{current_time}.csv'
-    #     IAM_ROLE 'iam_role'
-    #     CSV
-    #     IGNOREHEADER 1
-    #     DATEFORMAT 'auto'
-    #     TIMEFORMAT 'auto';
-    # """
-
-    # try:
-    #     cursor.execute(copy_sql)
-    #     conn.commit()
-    #     logging.info(f"데이터 적재 성공 'WH_FCT_AFS_DL_INFO'.")
-    # except Exception as e:
-    #     conn.rollback()
-    #     logging.error(f"데이터 적재 실패: {e}")
-    # finally:
-    #     cursor.close()
-    #     conn.close()
+    try:
+        cursor.execute(copy_sql)
+        conn.commit()
+        logging.info(f"데이터 적재 성공 'WH_FCT_AFS_DL_INFO'.")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"데이터 적재 실패: {e}")
+    finally:
+        cursor.close()
+        conn.close()
 
 
 default_args = {
@@ -137,7 +138,7 @@ default_args = {
 dag = DAG(
     'fct_afs_dl_to_s3',
     default_args=default_args,
-    description='단기육상예보 fct_afs_dl upload to S3',
+    description='단기육상예보 fct_afs_dl upload to S3 // S3 to Redshift',
     schedule_interval='0 21,3,9 * * *',  # UTC 기준, KST로는 6시, 12시, 18시
     catchup=True # ec2 서버 중지 후 재시작 -> 그 동안 안 들어온 데이터 저장 가능
 )
