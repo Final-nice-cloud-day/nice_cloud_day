@@ -16,7 +16,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 21, 10, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 21, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -53,6 +53,7 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
 
     if response.status_code == 200:
         response_text = response.text
+        logging.info(f"응답 데이터:\n{response_text}")
 
         if "#START7777" in response_text and "#7777END" in response_text:
             lines = response_text.splitlines()
@@ -63,17 +64,14 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
                 if line.startswith('# REG_ID'):
                     start_index = i + 1
                     break
-
+            logging.info(f"start_index: {start_index}")
             for line in lines[start_index:]:
-                if line.strip():
-                    if line.startswith('#7777END'):
-                        break
+                if line.strip() and not line.startswith('#7777END'):
                     columns = line.split(',')
                     columns = [col.strip() for col in columns if col.strip()]  
 
                     if columns[-1] == '=':
                         columns = columns[:-1]
-
                     
                     if len(columns) < 12:
                         columns += [None] * (12 - len(columns))
@@ -147,15 +145,14 @@ def fct_afs_wc_to_redshift(**kwargs):
     logging.info(f"S3 경로: {s3_key}")
     
     csv_reader = csv.reader(StringIO(csv_content))
-    header = next(csv_reader)  # Skip 헤더
+    next(csv_reader)  # Skip 헤더
     
     data = []
     for row in csv_reader:
         try:
             reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta = row
-            tm_st = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
-            tm_ed = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
-            data.append((reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta, logical_date, tm_st, tm_st))
+            tm_fc = datetime.strptime(tm_fc, '%Y-%m-%d %H:%M:%S')
+            data.append((reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta, logical_date, tm_fc, tm_fc))
         except ValueError as e:
             logging.warning(f"ERROR : 파싱오류: {row}, error: {e}")
             
@@ -184,7 +181,7 @@ with DAG(
     'fct_afs_wc_to_s3_redshift',
     default_args=default_args,
     description='fct_afs_wc upload to S3 and Redshift',
-    schedule_interval='0 10,19 * * *',
+    schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=timedelta(hours=2)
 ) as dag:

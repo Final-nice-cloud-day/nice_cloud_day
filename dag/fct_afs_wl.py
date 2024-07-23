@@ -16,7 +16,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 7, 21, 10, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 21, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -148,8 +148,7 @@ def fct_afs_wl_to_redshift(**kwargs):
     for row in csv_reader:
         try:
             reg_id, tm_st, tm_ed, mood_key, stn_id, cnt_cd, wf_sky_cd, wf_pre_cd, conf_lv, wf_info, rn_st = row
-            tm_st = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
-            tm_ed = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
+            tm_st = datetime.strptime(tm_st, '%Y-%m-%d %H:%M:%S')
             data.append((reg_id, tm_st, tm_ed, mood_key, stn_id, cnt_cd, wf_sky_cd, wf_pre_cd, conf_lv, wf_info, rn_st, logical_date, tm_st, tm_st))
         except ValueError as e:
             logging.warning(f"ERROR : 파싱오류: {row}, error: {e}")
@@ -180,7 +179,7 @@ with DAG(
     'fct_afs_wl_to_s3_redshift',
     default_args=default_args,
     description='fct_afs_wl upload to S3 and Redshift',
-    schedule_interval='0 10,19 * * *',
+    schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=timedelta(hours=2)
 ) as dag:

@@ -6,6 +6,7 @@ import requests
 import boto3
 import csv
 from io import StringIO
+from bs4 import BeautifulSoup
 import pendulum
 import logging
 
@@ -20,12 +21,74 @@ default_args = {
     'retries': 0,
     #'retry_delay': timedelta(minutes=5),
 }
+
+def parse_fixed_width(line):
+    return {
+        "tm": line[0:8].strip(),
+        "stn": line[9:12].strip(),
+        "ws_avg": line[13:17].strip(),
+        "wr_day": line[18:22].strip(),
+        "wd_max": line[23:25].strip(),
+        "ws_max": line[26:30].strip(),
+        "ws_max_tm": line[31:35].strip(),
+        "wd_ins": line[36:38].strip(),
+        "ws_ins": line[39:43].strip(),
+        "ws_ins_tm": line[44:48].strip(),
+        "ta_avg": line[49:53].strip(),
+        "ta_max": line[54:58].strip(),
+        "ta_max_tm": line[59:63].strip(),
+        "ta_min": line[64:68].strip(),
+        "ta_min_tm": line[69:73].strip(),
+        "td_avg": line[74:78].strip(),
+        "ts_avg": line[79:83].strip(),
+        "tg_min": line[84:88].strip(),
+        "hm_avg": line[89:94].strip(),
+        "hm_min": line[95:99].strip(),
+        "hm_min_tm": line[100:104].strip(),
+        "pv_avg": line[105:109].strip(),
+        "ev_s": line[110:114].strip(),
+        "ev_l": line[115:119].strip(),
+        "fg_dur": line[120:124].strip(),
+        "pa_avg": line[125:130].strip(),
+        "ps_avg": line[131:136].strip(),
+        "ps_max": line[137:142].strip(),
+        "ps_max_tm": line[143:147].strip(),
+        "ps_min": line[148:152].strip(),
+        "ps_min_tm": line[153:157].strip(),
+        "ca_tot": line[158:162].strip(),
+        "ss_day": line[163:167].strip(),
+        "ss_dur": line[168:172].strip(),
+        "ss_cmb": line[173:177].strip(),
+        "si_day": line[178:182].strip(),
+        "si_60m_max": line[183:187].strip(),
+        "si_60m_max_tm": line[188:192].strip(),
+        "rn_day": line[193:197].strip(),
+        "rn_d99": line[198:202].strip(),
+        "rn_dur": line[203:207].strip(),
+        "rn_60m_max": line[208:212].strip(),
+        "rn_60m_max_tm": line[213:217].strip(),
+        "rn_10m_max": line[218:222].strip(),
+        "rn_10m_max_tm": line[223:227].strip(),
+        "rn_pow_max": line[228:232].strip(),
+        "rn_pow_max_tm": line[233:237].strip(),
+        "sd_new": line[238:242].strip(),
+        "sd_new_tm": line[243:247].strip(),
+        "sd_max": line[248:252].strip(),
+        "sd_max_tm": line[253:257].strip(),
+        "te_05": line[258:262].strip(),
+        "te_10": line[263:267].strip(),
+        "te_15": line[268:272].strip(),
+        "te_30": line[273:277].strip(),
+        "te_50": line[278:282].strip()
+    }
+    
 def kma_sfcdd3_to_s3(**kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/kma_sfcdd3.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     params = {
     'tm1' : '20240101',
-    'tm2' : '20240701',
+    'tm2' : '20240102',
+    'disp' : 0 ,
     'stn' : '',
     'help': 0,
     'authKey': api_key
@@ -36,108 +99,72 @@ def kma_sfcdd3_to_s3(**kwargs):
 
     if response.status_code == 200:
         response_text = response.text
+        logging.info(f"응답 데이터:\n{response_text}")
 
         if "#START7777" in response_text and "#7777END" in response_text:
             lines = response_text.splitlines()
             data = []
 
             start_index = 0
+            end_index = len(lines)
+            
             for i, line in enumerate(lines):
-                if line.startswith('# REG_ID'):
-                    start_index = i + 1
+                if line.startswith('#START7777'):
+                    start_index = i + 5
+                elif line.startswith('#7777END'):
+                    end_index = i
                     break
-
-            for line in lines[start_index:]:
-                if line.strip():
-                    if line.startswith('#7777END'):
-                        break
-                    columns = line.split(',')
-                    columns = [col.strip() for col in columns if col.strip()]  
-
-                    if columns[-1] == '=':
-                        columns = columns[:-1]
-
-                    
-                    if len(columns) < 12:
-                        columns += [None] * (12 - len(columns))
-
-                    try:
-                        tm = columns[0]
-                        stn = columns[1]
-                        ws_avg = columns[2]
-                        wr_day = columns[3]
-                        wd_max = columns[4]
-                        ws_max = columns[5]
-                        ws_max_tm = columns[6]
-                        wd_ins = columns[7]
-                        ws_ins = columns[8]
-                        ws_ins_tm = columns[9]
-                        ta_avg = columns[10]
-                        ta_max = columns[11]
-                        ta_max_tm = columns[12]
-                        ta_min = columns[13]
-                        ta_min_tm = columns[14]
-                        td_avg = columns[15]
-                        ts_avg = columns[16]
-                        tg_min = columns[17]
-                        hm_avg = columns[18]
-                        hm_min = columns[19]
-                        hm_min_tm = columns[20]
-                        pv_avg = columns[21]
-                        ev_s = columns[22]
-                        ev_l = columns[23]
-                        fg_dur = columns[24]
-                        pa_avg = columns[25]
-                        ps_avg = columns[26]
-                        ps_max = columns[27]
-                        ps_max_tm = columns[28]
-                        ps_min = columns[29]
-                        ps_min_tm = columns[30]
-                        ca_tot = columns[31]
-                        ss_day = columns[32]
-                        ss_dur = columns[33]
-                        ss_cmb = columns[34]
-                        si_day = columns[35]
-                        si_60m_max = columns[36]
-                        si_60m_max_tm = columns[37]
-                        rn_day = columns[38]
-                        rn_d99 = columns[39]
-                        rn_dur = columns[40]
-                        rn_60m_max = columns[41]
-                        rn_60m_max_tm = columns[42]
-                        rn_10m_max = columns[43]
-                        rn_10m_max_tm = columns[44]
-                        rn_pow_max = columns[45]
-                        rn_pow_max_tm = columns[46]
-                        sd_new = columns[47]
-                        sd_new_tm = columns[48]
-                        sd_max = columns[49]
-                        sd_max_tm = columns[50]
-                        te_05 = columns[51]
-                        te_10 = columns[52]
-                        te_15 = columns[53]
-                        te_30 = columns[54]
-                        te_50 = columns[55]
-                        data.append((tm, stn, ws_avg, wr_day, wd_max, ws_max, ws_max_tm, wd_ins, ws_ins, ws_ins_tm, ta_avg, ta_max, ta_max_tm, ta_min, ta_min_tm, td_avg, ts_avg, tg_min, hm_avg, hm_min, hm_min_tm, pv_avg, ev_s, ev_l, fg_dur, pa_avg, ps_avg, ps_max, ps_max_tm, ps_min, ps_min_tm, ca_tot, ss_day, ss_dur, ss_cmb, si_day, si_60m_max, si_60m_max_tm, rn_day, rn_d99, rn_dur, rn_60m_max, rn_60m_max_tm, rn_10m_max, rn_10m_max_tm, rn_pow_max, rn_pow_max_tm, sd_new, sd_new_tm, sd_max, sd_max_tm, te_05, te_10, te_15, te_30, te_50))
-                    except ValueError as e:
-                        logging.warning(f"행을 파싱하는 중 오류 발생: {e}")
                 
+            logging.info(f"start_index: {start_index}, end_index: {end_index}")
+            
+            for line in lines[start_index:end_index]:
+                if line.strip():
+                    parsed_data = parse_fixed_width(line)
+                    data.append(parsed_data)
+                    logging.info(f"Parsed data: {parsed_data}")
+
             if data:
-                # s3 버킷 디렉토리 생성 기준을 tm_st 기준으로
+                csv_buffer = StringIO()
+                csv_writer = csv.writer(csv_buffer)
+                csv_writer.writerow([
+                    'TM', 'STN', 'WS_AVG', 'WR_DAY', 'WD_MAX', 'WS_MAX',
+                    'WS_MAX_TM', 'WD_INS', 'WS_INS', 'WS_INS_TM', 'TA_AVG',
+                    'TA_MAX', 'TA_MAX_TM', 'TA_MIN', 'TA_MIN_TM', 'TD_AVG',
+                    'TS_AVG', 'TG_MIN', 'HM_AVG', 'HM_MIN', 'HM_MIN_TM',
+                    'PV_AVG', 'EV_S', 'EV_L', 'FG_DUR', 'PA_AVG', 'PS_AVG',
+                    'PS_MAX', 'PS_MAX_TM', 'PS_MIN', 'PS_MIN_TM', 'CA_TOT',
+                    'SS_DAY', 'SS_DUR', 'SS_CMB', 'SI_DAY', 'SI_60M_MAX',
+                    'SI_60M_MAX_TM', 'RN_DAY', 'RN_D99', 'RN_DUR', 'RN_60M_MAX',
+                    'RN_60M_MAX_TM', 'RN_10M_MAX', 'RN_10M_MAX_TM', 'RN_POW_MAX',
+                    'RN_POW_MAX_TM', 'SD_NEW', 'SD_NEW_TM', 'SD_MAX', 'SD_MAX_TM',
+                    'TE_05', 'TE_10', 'TE_15', 'TE_30', 'TE_50'
+                ])
+
+                for row in data:
+                    csv_writer.writerow([
+                        row["tm"], row["stn"], row["ws_avg"], row["wr_day"], row["wd_max"], row["ws_max"],
+                        row["ws_max_tm"], row["wd_ins"], row["ws_ins"], row["ws_ins_tm"], row["ta_avg"],
+                        row["ta_max"], row["ta_max_tm"], row["ta_min"], row["ta_min_tm"], row["td_avg"],
+                        row["ts_avg"], row["tg_min"], row["hm_avg"], row["hm_min"], row["hm_min_tm"],
+                        row["pv_avg"], row["ev_s"], row["ev_l"], row["fg_dur"], row["pa_avg"], row["ps_avg"],
+                        row["ps_max"], row["ps_max_tm"], row["ps_min"], row["ps_min_tm"], row["ca_tot"],
+                        row["ss_day"], row["ss_dur"], row["ss_cmb"], row["si_day"], row["si_60m_max"],
+                        row["si_60m_max_tm"], row["rn_day"], row["rn_d99"], row["rn_dur"], row["rn_60m_max"],
+                        row["rn_60m_max_tm"], row["rn_10m_max"], row["rn_10m_max_tm"], row["rn_pow_max"],
+                        row["rn_pow_max_tm"], row["sd_new"], row["sd_new_tm"], row["sd_max"], row["sd_max_tm"],
+                        row["te_05"], row["te_10"], row["te_15"], row["te_30"], row["te_50"]
+                    ])
+
+                tm = datetime.strptime(data[0]["tm"], '%Y%m%d') if data[0]["tm"] else datetime.min
                 year = tm.strftime('%Y')
                 month = tm.strftime('%m')
                 day = tm.strftime('%d')
                 formatted_date = tm.strftime('%Y_%m_%d')
 
-                csv_buffer = StringIO()
-                csv_writer = csv.writer(csv_buffer)
-                csv_writer.writerow(['TM', 'STN_ID', 'WS_AVG', 'WR_DAY', 'WD_MAX', 'WS_MAX', 'WS_MAX_TM', 'WD_INS', 'WS_INS', 'WS_INS_TM', 'TA_AVG', 'TA_MAX', 'TA_MAX_TM', 'TA_MIN', 'TA_MIN_TM', 'TD_AVG', 'TS_AVG', 'TG_MIN', 'HM_AVG', 'HM_MIN', 'HM_MIN_TM', 'PV_AVG', 'EV_S', 'EV_L', 'FG_DUR', 'PA_AVG', 'PS_AVG', 'PS_MAX', 'PS_MAX_TM', 'PS_MIN', 'PS_MIN_TM', 'CA_TOT', 'SS_DAY', 'SS_DUR', 'SS_CMB', 'SI_DAY', 'SI_60M_MAX', 'SI_60M_MAX_TM', 'RN_DAY', 'RN_D99', 'RN_DUR', 'RN_60M_MAX', 'RN_60M_MAX_TM', 'RN_10M_MAX', 'RN_10M_MAX_TM', 'RN_POW_MAX', 'RN_POW_MAX_TM', 'SD_NEW', 'SD_NEW_TM', 'SD_MAX', 'SD_MAX_TM', 'TE_05', 'TE_10', 'TE_15', 'TE_30', 'TE_50'])
-                csv_writer.writerows(data)
-                
                 s3_hook = S3Hook(aws_conn_id='AWS_S3')
                 bucket_name = 'team-okky-1-bucket'
                 s3_key = f'kma_sfcdd3/{year}/{month}/{day}/{formatted_date}_kma_sfcdd3.csv'
-                
+
                 try:
                     s3_hook.load_string(
                         csv_buffer.getvalue(),
@@ -146,7 +173,6 @@ def kma_sfcdd3_to_s3(**kwargs):
                         replace=True
                     )
                     logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
-                    kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
                 except Exception as e:
                     logging.error(f"S3 업로드 실패: {e}")
                     raise ValueError(f"S3 업로드 실패: {e}")
@@ -161,11 +187,12 @@ def kma_sfcdd3_to_s3(**kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
 
+
 with DAG(
     'kma_sfcdd3_to_s3',
     default_args=default_args,
     description='kma_sfcdd3 upload to S3',
-    schedule_interval='0 10 * * *',
+    schedule_interval='0 7 * * *',
     catchup=False,
 ) as dag:
     dag.timezone = kst

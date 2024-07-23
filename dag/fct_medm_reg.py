@@ -15,7 +15,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 21, 10, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 21, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
