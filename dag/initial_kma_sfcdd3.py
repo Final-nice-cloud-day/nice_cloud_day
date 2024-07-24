@@ -16,7 +16,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 24, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -32,13 +32,12 @@ def parse_fixed_width(line):
 def kma_sfcdd3_to_s3(logical_date, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/kma_sfcdd3.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
-    
-    logical_date_kst = logical_date.in_timezone(kst)
-    date_str = logical_date.strftime('%Y%m%d')
+    # 초기적재를 위해서 아래 부분 주석 처리
+    # date_str = logical_date.strftime('%Y%m%d')
     
     params = {
-    'tm1' : date_str,
-    'tm2' : date_str,
+    'tm1' : '20200101',
+    'tm2' : '20240630',
     'disp' : 0 ,
     'stn' : '',
     'help': 0,

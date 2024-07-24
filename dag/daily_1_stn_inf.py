@@ -16,14 +16,14 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 21, 7, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 23, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retries': 0,
+    #'retry_delay': timedelta(minutes=5),
 }
 
-def stninf_to_s3(**kwargs):
+def stn_inf_to_s3(logical_date, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/stn_inf.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     params = {
@@ -47,14 +47,14 @@ def stninf_to_s3(**kwargs):
             start_index = 0
             for i, line in enumerate(lines):
                 if line.startswith('#START7777'):
-                    start_index = i + 2
+                    start_index = i + 3
                     break
             logging.info(f"start_index: {start_index}")
             for line in lines[start_index:]:
                 if line.strip() and not line.startswith('#7777END'):
                     columns = line.split(',')
                     columns = [col.strip() for col in columns if col.strip()]  
-
+                    
                     if columns[-1] == '=':
                         columns = columns[:-1]
 
@@ -75,19 +75,21 @@ def stninf_to_s3(**kwargs):
                         law_id = columns[13]
                         basin = columns[14]
                         data.append((stn_id, lon, stn_sp, ht, ht_pa, ht_ta, ht_wd, ht_rn, stn_cd, stn_ko, stn_en, stn_ad, fct_id, law_id, basin))
+                        logging.info(f"Data: {data}")
                     except ValueError as e:
                         logging.warning(f"행을 파싱하는 중 오류 발생: {e}")
                 
             if data:
-                # s3 버킷 디렉토리 생성 기준을 tm_fc 기준으로
-                year = tm_fc.strftime('%Y')
-                month = tm_fc.strftime('%m')
-                day = tm_fc.strftime('%d')
-                formatted_date = tm_fc.strftime('%Y_%m_%d')
+                logical_date_kst = logical_date.in_timezone(kst)
+                date_str = logical_date_kst.strftime('%Y%m%d')
+                year = date_str.strftime('%Y')
+                month = date_str.strftime('%m')
+                day = date_str.strftime('%d')
+                formatted_date = date_str.strftime('%Y_%m_%d')
 
                 csv_buffer = StringIO()
                 csv_writer = csv.writer(csv_buffer)
-                csv_writer.writerow(['REG_ID','TM_FC','TM_EF','MODE_KEY','STN_ID','CNT_CD','MIN_TA','MAX_TA','MIN_L_TA','MIN_H_TA','MAX_L_TA','MAX_H_TA'])
+                csv_writer.writerow(['STN_ID', 'LON', 'STN_SP', 'HT', 'HT_PA', 'HT_TA', 'HT_WD', 'HT_RN', 'STN_CD', 'STN_KO', 'STN_EN', 'STN_AD', 'FCT_ID', 'LAW_ID', 'BASIN'])
                 csv_writer.writerows(data)
                 
                 s3_hook = S3Hook(aws_conn_id='AWS_S3')
@@ -116,3 +118,28 @@ def stninf_to_s3(**kwargs):
         logging.error(f"ERROR : 응답 코드 오류 {response.status_code}")
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
+    
+
+with DAG(
+    'Daily_1_stn_inf_to_s3',
+    default_args=default_args,
+    description='stn_inf upload to S3',
+    schedule_interval='0 7 * * *',
+    catchup=True,
+    dagrun_timeout=timedelta(hours=2),
+) as dag:
+    dag.timezone = kst
+    
+    stn_inf_to_s3_task = PythonOperator(
+        task_id='stn_inf_to_s3',
+        python_callable=stn_inf_to_s3,
+        execution_timeout=timedelta(hours=1),
+    )
+    
+    # stn_inf_to_redshift_task = PythonOperator(
+    #     task_id='stn_inf_to_redshift',
+    #     python_callable=stn_inf_to_redshift,
+    #     execution_timeout=timedelta(hours=1),
+    # )
+
+    stn_inf_to_s3_task # >> stn_inf_to_redshift_task

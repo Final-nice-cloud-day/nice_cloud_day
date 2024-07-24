@@ -157,7 +157,6 @@ def fct_medm_reg_to_redshift(logical_date, **kwargs):
         """
         execute_values(cursor, insert_temp_query, data)
         
-        # Insert new records from the temporary table into the main table
         insert_query = """
         INSERT INTO raw_data.fct_medm_reg_list (REG_ID, TM_ST, TM_ED, REG_SP, REG_NAME, DATA_KEY, CREATED_AT, UPDATED_AT)
         SELECT t.REG_ID, t.TM_ST, t.TM_ED, t.REG_SP, t.REG_NAME, t.DATA_KEY, t.CREATED_AT, t.UPDATED_AT

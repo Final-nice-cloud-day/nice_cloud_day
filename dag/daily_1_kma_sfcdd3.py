@@ -34,7 +34,7 @@ def kma_sfcdd3_to_s3(logical_date, **kwargs):
     api_key = "HGbLr74hS2qmy6--ITtqog"
     
     logical_date_kst = logical_date.in_timezone(kst)
-    date_str = logical_date.strftime('%Y%m%d')
+    date_str = logical_date_kst.strftime('%Y%m%d')
     
     params = {
     'tm1' : date_str,
