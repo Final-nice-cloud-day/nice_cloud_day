@@ -24,7 +24,7 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-def stn_inf_to_s3(logical_date, **kwargs):
+def stn_inf_to_s3(data_interval_start_kst, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/stn_inf.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     params = {
@@ -81,11 +81,11 @@ def stn_inf_to_s3(logical_date, **kwargs):
                         logging.warning(f"행을 파싱하는 중 오류 발생: {e}")
                 
             if data:
-                logical_date_kst = logical_date.in_timezone(kst)
-                year = logical_date_kst.strftime('%Y')
-                month = logical_date_kst.strftime('%m')
-                day = logical_date_kst.strftime('%d')
-                formatted_date = logical_date_kst.strftime('%Y_%m_%d')
+                data_interval_start_kst = data_interval_start_kst.in_timezone(kst)
+                year = data_interval_start_kst.strftime('%Y')
+                month = data_interval_start_kst.strftime('%m')
+                day = data_interval_start_kst.strftime('%d')
+                formatted_date = data_interval_start_kst.strftime('%Y_%m_%d')
 
                 csv_buffer = StringIO()
                 csv_writer = csv.writer(csv_buffer)
@@ -119,7 +119,7 @@ def stn_inf_to_s3(logical_date, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def stn_inf_to_redshift(logical_date, **kwargs):
+def stn_inf_to_redshift(data_interval_start, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='stn_inf_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -136,7 +136,7 @@ def stn_inf_to_redshift(logical_date, **kwargs):
     for row in csv_reader:
         try:
             stn_id, lon, lat, stn_sp, ht, ht_pa, ht_ta, ht_wd, ht_rn, stn_ad, stn_ko, stn_en, fct_id, law_id, basin = row
-            data_key = logical_date + timedelta(hours=9)
+            data_key = data_interval_start + timedelta(hours=9)
             created_at = data_key
             updated_at = data_key
             data.append((stn_id, lon, lat, stn_sp, ht, ht_pa, ht_ta, ht_wd, ht_rn, stn_ad, stn_ko, stn_en, fct_id, law_id, basin, data_key, created_at, updated_at))

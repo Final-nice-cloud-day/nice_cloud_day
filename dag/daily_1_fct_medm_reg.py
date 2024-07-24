@@ -106,7 +106,7 @@ def fct_medm_reg_to_s3(**kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def fct_medm_reg_to_redshift(logical_date, **kwargs):
+def fct_medm_reg_to_redshift(data_interval_start, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_medm_reg_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -123,7 +123,7 @@ def fct_medm_reg_to_redshift(logical_date, **kwargs):
     for row in csv_reader:
         try:
             reg_id, tm_st, tm_ed, reg_sp, reg_name = row
-            data_key = logical_date + timedelta(hours=9)
+            data_key = data_interval_start + timedelta(hours=9)
             created_at = tm_st
             updated_at = tm_st
             if tm_ed == datetime(2100, 12, 31, 0, 0, 0):

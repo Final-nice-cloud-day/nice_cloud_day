@@ -23,13 +23,13 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-def fct_afs_wc_to_s3(logical_date, **kwargs):
+def fct_afs_wc_to_s3(data_interval_start, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/fct_afs_wc.php"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     
-    logical_date_kst = logical_date.in_timezone(kst)
-    logging.info(f"logical_date_kst: {logical_date_kst}")
-    one_hour_before = logical_date_kst - timedelta(hours=1)
+    data_interval_start_kst = data_interval_start.in_timezone(kst)
+    logging.info(f"data_interval_start_kst: {data_interval_start_kst}")
+    one_hour_before = data_interval_start_kst - timedelta(hours=1)
     tmfc1 = one_hour_before.strftime('%Y%m%d%H')
     logging.info(f"tmfc1: {tmfc1}")
     tmfc2 = one_hour_before.strftime('%Y%m%d%H')
@@ -133,7 +133,7 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def fct_afs_wc_to_redshift(logical_date, **kwargs):
+def fct_afs_wc_to_redshift(data_interval_start, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_afs_wc_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -151,7 +151,7 @@ def fct_afs_wc_to_redshift(logical_date, **kwargs):
         try:
             reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta = row
             tm_fc = datetime.strptime(tm_fc, '%Y-%m-%d %H:%M:%S')
-            data_key = logical_date + timedelta(hours=9)
+            data_key = data_interval_start + timedelta(hours=9)
             created_at = tm_fc
             updated_at = tm_fc
             data.append((reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta, data_key, created_at, updated_at))

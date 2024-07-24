@@ -29,11 +29,11 @@ def parse_fixed_width(line):
     
     return columns
     
-def kma_sfcdd3_to_s3(logical_date, **kwargs):
+def kma_sfcdd3_to_s3(data_interval_start, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/kma_sfcdd3.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     # 초기적재를 위해서 아래 부분 주석 처리
-    # date_str = logical_date.strftime('%Y%m%d')
+    # date_str = data_interval_start.strftime('%Y%m%d')
     
     params = {
     'tm1' : '20200101',
@@ -122,7 +122,7 @@ def kma_sfcdd3_to_s3(logical_date, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
 
-def kma_stcdd3_to_redshift(logical_date, **kwargs):
+def kma_stcdd3_to_redshift(data_interval_start, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='kma_sfcdd3_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -146,7 +146,7 @@ def kma_stcdd3_to_redshift(logical_date, **kwargs):
                 rn_day, rn_d99, rn_dur, rn_60m_max, rn_60m_max_tm, rn_10m_max, rn_10m_max_tm, rn_pow_max, \
                 rn_pow_max_tm, sd_new, sd_new_tm, sd_max, sd_max_tm, te_05, te_10, te_15, te_30, te_50 = row
 
-            data_key = logical_date + timedelta(hours=9)
+            data_key = data_interval_start + timedelta(hours=9)
             created_at = datetime.strptime(tm, '%Y%m%d')
             updated_at = datetime.strptime(tm, '%Y%m%d')
             data.append((tm, stn, ws_avg, wr_day, wd_max, ws_max, ws_max_tm, wd_ins, ws_ins, ws_ins_tm, 
