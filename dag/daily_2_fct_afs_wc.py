@@ -16,7 +16,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 21, 7, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -28,10 +28,10 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
     api_key = "HGbLr74hS2qmy6--ITtqog"
     
     logical_date_kst = logical_date.in_timezone(kst)
-    
+    logging.info(f"logical_date_kst: {logical_date_kst}")
     one_hour_before = logical_date_kst - timedelta(hours=1)
     tmfc1 = one_hour_before.strftime('%Y%m%d%H')
-    
+    logging.info(f"tmfc1: {tmfc1}")
     tmfc2 = one_hour_before.strftime('%Y%m%d%H')
 
     params = {
@@ -46,7 +46,7 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
     'disp': 1,
     'help': 0,
     'authKey': api_key
-}
+    }
 
     response = requests.get(api_url, params=params)
     logging.info(f"API 상태코드: {response.status_code}")
@@ -98,7 +98,8 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
                 year = tm_fc.strftime('%Y')
                 month = tm_fc.strftime('%m')
                 day = tm_fc.strftime('%d')
-                formatted_date = tm_fc.strftime('%Y_%m_%d')
+                hour = tm_fc.strftime('%H')
+                formatted_date = tm_fc.strftime('%Y_%m_%d_%H')
 
                 csv_buffer = StringIO()
                 csv_writer = csv.writer(csv_buffer)
@@ -107,7 +108,7 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
                 
                 s3_hook = S3Hook(aws_conn_id='AWS_S3')
                 bucket_name = 'team-okky-1-bucket'
-                s3_key = f'fct_afs_wc/{year}/{month}/{day}/{formatted_date}_fct_afs_wc.csv'
+                s3_key = f'fct_afs_wc/{year}/{month}/{day}/{hour}/{formatted_date}_fct_afs_wc.csv'
                 
                 try:
                     s3_hook.load_string(
@@ -132,15 +133,13 @@ def fct_afs_wc_to_s3(logical_date, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def fct_afs_wc_to_redshift(**kwargs):
+def fct_afs_wc_to_redshift(logical_date, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_afs_wc_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
     s3_hook = S3Hook(aws_conn_id='AWS_S3')
     redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
     bucket_name = 'team-okky-1-bucket'
-    logical_date = kwargs['logical_date'].in_timezone(kst)
-    
     csv_content = s3_hook.read_key(s3_key, bucket_name)
     logging.info(f"S3 경로: {s3_key}")
     
@@ -152,7 +151,10 @@ def fct_afs_wc_to_redshift(**kwargs):
         try:
             reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta = row
             tm_fc = datetime.strptime(tm_fc, '%Y-%m-%d %H:%M:%S')
-            data.append((reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta, logical_date, tm_fc, tm_fc))
+            data_key = logical_date + timedelta(hours=9)
+            created_at = tm_fc
+            updated_at = tm_fc
+            data.append((reg_id, tm_fc, tm_ef, mood_key, stn_id, cnt_cd, min_ta, max_ta, min_l_ta, min_h_ta, max_l_ta, max_h_ta, data_key, created_at, updated_at))
         except ValueError as e:
             logging.warning(f"ERROR : 파싱오류: {row}, error: {e}")
             
@@ -178,7 +180,7 @@ def fct_afs_wc_to_redshift(**kwargs):
         raise ValueError("ERROR : 적재할 데이터가 없습니다.")
 
 with DAG(
-    'fct_afs_wc_to_s3_redshift',
+    'Daily_2_fct_afs_wc_to_s3_and_redshift',
     default_args=default_args,
     description='fct_afs_wc upload to S3 and Redshift',
     schedule_interval='0 7,19 * * *',

@@ -15,7 +15,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 21, 7, 0, 0, tzinfo=kst),
+    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -106,14 +106,13 @@ def fct_medm_reg_to_s3(**kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def fct_medm_reg_to_redshift(**kwargs):
+def fct_medm_reg_to_redshift(logical_date, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_medm_reg_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
     s3_hook = S3Hook(aws_conn_id='AWS_S3')
     bucket_name = 'team-okky-1-bucket'
     redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
-    logical_date = kwargs['logical_date'].in_timezone(kst)
     
     csv_content = s3_hook.read_key(s3_key, bucket_name)
     logging.info(f"S3 경로: {s3_key}")
@@ -124,10 +123,11 @@ def fct_medm_reg_to_redshift(**kwargs):
     for row in csv_reader:
         try:
             reg_id, tm_st, tm_ed, reg_sp, reg_name = row
-            tm_st = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
-            tm_ed = datetime.strptime(tm_ed, '%Y-%m-%d %H:%M:%S')
+            data_key = logical_date + timedelta(hours=9)
+            created_at = tm_st
+            updated_at = tm_st
             if tm_ed == datetime(2100, 12, 31, 0, 0, 0):
-                data.append((reg_id, tm_st, tm_ed, reg_sp, reg_name, logical_date, tm_st, tm_st))
+                data.append((reg_id, tm_st, tm_ed, reg_sp, reg_name, data_key, created_at, updated_at))
         except ValueError as e:
             logging.warning(f"ERROR : 파싱오류: {row}, error: {e}")
         
@@ -178,10 +178,10 @@ def fct_medm_reg_to_redshift(**kwargs):
   
 
 with DAG(
-    'fct_medm_reg_to_s3_and_redshift',
+    'Daily_1_fct_medm_reg_to_s3_and_redshift',
     default_args=default_args,
     description='fct_medm_reg upload to S3 and redshift',
-    schedule_interval='0 10 * * *',
+    schedule_interval='0 7 * * *',
     catchup=False,
 ) as dag:
     dag.timezone = kst
