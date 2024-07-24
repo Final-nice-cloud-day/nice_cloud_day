@@ -64,9 +64,8 @@ def special_weather_to_s3(start_date, end_date):
                 df['TM_IN'] = df['TM_IN'].dt.strftime('%Y-%m-%d %H:%M')
                 df['TM_EF'] = df['TM_EF'].dt.strftime('%Y-%m-%d %H:%M')
 
-                current_time = pd.Timestamp.now(tz=kst)
-                df['created_at'] = current_time
-                df['updated_at'] = current_time
+                df['created_at'] = pd.to_datetime(df['TM_FC']).dt.strftime('%Y-%m-%d %H:%M')
+                df['updated_at'] = pd.to_datetime(df['TM_IN']).dt.strftime('%Y-%m-%d %H:%M')
 
                 year = current_date.strftime('%Y')
                 month = current_date.strftime('%m')
@@ -151,10 +150,11 @@ def preprocess_data_in_s3(year, month, day):
         df['CMD'] = df['CMD'].astype(str).map(cmd_mapping).fillna(df['CMD'])
         df['WRN'] = df['WRN'].astype(str).map(wrn_mapping).fillna(df['WRN'])
         
-        # df['STN_ID'] = df['STN']
-        # df['WRN_LVL'] = df['LVL']
-        # df['WRN_CMD'] = df['CMD']
-        # df['WRN_ID'] = df['WRN']
+        df['STN'] = df['STN'].astype(float).astype(int)
+        df['GRD'] = df['GRD'].astype(int)
+        df['CNT'] = df['CNT'].astype(int)
+        df['RPT'] = df['RPT'].astype(int)
+
 
         csv_buffer = io.StringIO()
         df.to_csv(csv_buffer, index=False, date_format='%Y-%m-%d %H:%M', encoding='utf-8-sig')
@@ -178,10 +178,10 @@ def create_table_if_not_exists(redshift_hook):
         REG_ID VARCHAR(50),
         WRN_ID VARCHAR(11),
         WRN_LVL VARCHAR(11),
-        WRN_CMD VARCHAR(50),
-        WRN_GRD VARCHAR(50),
+        WRN_CMD VARCHAR(11),
+        WRN_GRD INTEGER,
         CNT INTEGER,
-        RPT VARCHAR(50),
+        RPT INTEGER,
         data_key TIMESTAMP,
         created_at TIMESTAMP,
         updated_at TIMESTAMP
