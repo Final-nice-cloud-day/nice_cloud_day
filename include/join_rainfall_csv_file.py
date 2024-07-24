@@ -32,7 +32,6 @@ merged_data['last_at'] = pd.to_datetime(merged_data['last_at'], format='%Y%m%d')
 merged_data['data_key'] = now
 merged_data['created_at'] = merged_data['first_at']
 merged_data['updated_at'] = merged_data['last_at'].apply(lambda x: now if 0 <= (today - x).total_seconds() <= 3600 else x.strftime("%Y%m%d"))
-merged_data['last_at'] = merged_data['last_at'].dt.strftime("%Y%m%d%H:%M:%S")
 
 # 결과 저장
 output_file_path = '/opt/airflow/data/info/rainfall_info.csv'
