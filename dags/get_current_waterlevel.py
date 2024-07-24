@@ -2,18 +2,22 @@ import requests
 import json
 import csv
 import time
+import logging
+
+from pytz import timezone
+from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
 
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 from plugins import s3
 
+local_tz = timezone('Asia/Seoul')
 redshift_conn_id = "AWS_Redshift" # 'redshift_dev_db'
 s3_conn_id = "AWS_S3" # 'aws_conn_choi'
 s3_bucket = "team-okky-1-bucket" # 'yonggu-practice-bucket'
@@ -37,22 +41,29 @@ tables_info = [
             "attn_level float",
             "warn_level float",
             "danger_level float",
+            "data_key timestamp",
+            "created_at timestamp",
+            "updated_at timestamp",
         ]
     },
     {
         "table_name": "water_level_data",
         "table_schema": [
-            "obs_id int primary key",
-            "tm_obs timestamp not null",
+            "obs_id int not null",
+            "obs_date timestamp not null",
             "water_level float",
             "flow float",
+            "data_key timestamp",
+            "created_at timestamp",
+            "updated_at timestamp",
+            "primary key(obs_id, obs_date)",
         ]
     },
 ]
 
 default_args = {
     'owner': 'yonggu',
-    'start_date': datetime(2024, 7, 10),
+    'start_date': datetime(2024, 7, 23, tzinfo=local_tz),
     'email': ['yonggu.choi.14@gmail.com'],
     'retries': 1,
     'retry_delay': timedelta(minutes=3),
@@ -61,21 +72,31 @@ default_args = {
 
 dag = DAG(
     dag_id="water_level_collection", # DAG name
-    schedule_interval=None,
+    schedule_interval='0 2,7,11 * * *',
     tags=['water_level_check'],
-    catchup=False,
-    default_args=default_args 
+    catchup=True,
+    default_args=default_args
 )
 
 def copy_to_s3(**context):
     table = context["params"]["table"]
     s3_key = context["params"]["s3_key"]
-    date = context["params"]["date"]
+    flag = context["params"]["flag"]
+    date = context['task_instance'].xcom_pull(key="return_value", task_ids='collect_entire_stream_level_list')
 
-    file_name = table + '_' + date if date is not None else 'info/' + table
-    local_files_to_upload = [data_dir + '/' + '{}.csv'.format(file_name)]
+    local_files_to_upload = []
+
+    # 테이블 정보
+    if not flag:
+        file_name = 'info/' + table
+        local_files_to_upload.append(f"""{data_dir}/{file_name}.csv""")
+    # 수위 데이터
+    else:
+        for each_date in date:
+            file_name = table + '_' + each_date
+            local_files_to_upload.append(f"""{data_dir}/{file_name}.csv""")
+    
     replace = True
-
     s3.upload_to_s3(s3_conn_id, s3_bucket, s3_key, local_files_to_upload, replace)
 
 
@@ -89,7 +110,7 @@ def get_entire_stream_list(**context):
         entire_list.append([elements["wlobscd"].strip(), elements["obsnm"].strip(), elements["lat"].strip(), elements["lon"].strip(), elements["agcnm"].strip(), 
                             elements["attwl"].strip(), elements["wrnwl"].strip(), elements["almwl"].strip()])
     
-    print(f"entire_list_count: {len(entire_list) - 1}")
+    logging.info(f"entire_list_count: {len(entire_list) - 1}")
 
     with open("/opt/airflow/data/waterlevel/list.csv", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
@@ -112,39 +133,91 @@ def read_csv_file(file_path):
         id_list = [row[0] for row in csv_reader]
         return id_list
 
-def convert_date_pair(dates):
+def convert_date_pair(dates, now):
+    date_pair = []
+    curr_end_date = now.strftime('%Y%m%d')
+
     if not dates:
-        now = datetime.now()
         # 현재 달의 첫날
         start_date = now.replace(day=1).strftime('%Y%m%d')
-        end_date = now.strftime('%Y%m%d')
-        dates = [(start_date, end_date, start_date[:6])]
+        date_pair = [(start_date, curr_end_date, start_date[:6])]
     else:
-        result = []
         for year in dates:
             try:
                 year_int = int(year)
                 start_date = f"{year}0101"
                 end_date = f"{year}1231"
-                result.append((start_date, end_date, year))
+                end_date = datetime.strptime(end_date, '%Y%m%d').date()
+
+                # 오늘에 해당하는 달(ex. 2024-07-17 -> 202407) 이후 데이터는 수집하지 않음
+                if now.date() < end_date:
+                    last_month_date = now.replace(day=1) - timedelta(days=1)
+                    end_date = last_month_date.strftime('%Y%m%d')
+                # 오늘에 해당하는 달 데이터 수집
+                else:
+                    end_date = end_date.strftime('%Y%m%d')
+
+                date_pair.append((start_date, end_date, year))
             except ValueError:
                 # year가 정수가 아닐 때 처리
-                print(f"Invalid year: {year}")
+                logging.warning(f"Invalid year: {year}")
                 continue
-        dates = result
     
-    return dates
+    return date_pair
 
-def get_entire_stream_waterlevel_list(*dates):
-    entire_list = [["obs_id", "updated_at", "water_level", "flow"]]
+def insert_history_time(record, now, today):
+    # 새로운 데이터를 저장할 리스트
+    obs_id, obs_date, water_level, flow = record
+    
+    # 생성 시간: obs_date를 사용
+    created_at = datetime.strptime(obs_date, '%Y%m%d').strftime('%Y-%m-%d %H:%M:%S')
+    
+    # 수정 시간: obs_date가 오늘 날짜인 경우 현재 시간으로 설정
+    if obs_date == today:
+        updated_at = now
+    else:
+        updated_at = created_at
+    
+    # 수집 시간: 현재 시간
+    data_key = now
+    
+    # 새로운 레코드 생성
+    new_record = record + [data_key, created_at, updated_at]
+    
+    return new_record
+
+def get_entire_stream_waterlevel_list(**kwargs):
+    entire_list = [["obs_id", "obs_date", "water_level", "flow", "data_key", "created_at", "updated_at"]]
     row = read_csv_file("/opt/airflow/data/waterlevel/extracted_id_list.csv")
 
-    print(f"row count>> {len(row)}")
-    idx = 0
+    logging.info(f"row count>> {len(row)}")
 
-    convert_dates = convert_date_pair(dates)
+    now = kwargs["execution_date"].in_timezone('Asia/Seoul')
+    now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    today = now.strftime('%Y%m%d')
 
-    for date in convert_dates:
+    # DAG 실행 전 conf 파라미터 전달받아 실행하고자 하는 시작 연도, 종료 연도 입력
+    conf = kwargs['dag_run'].conf
+
+    start_date = conf.get('start_date')
+    end_date = conf.get('end_date')
+
+    logging.debug(start_date, end_date)
+
+    dates = []
+    if (start_date is None) and (end_date is None):
+        dates = None
+    else:
+        for year in range(int(start_date), int(end_date) + 1):
+            dates.append(str(year))
+
+    date_pair = convert_date_pair(dates, now)
+
+    # 파라미터 전달하지 않은 경우 이번 달에 해당하는 데이터만 수집
+    if dates is None:
+        dates = [date_pair[0][2],]
+
+    for date in date_pair:
         for id in row:
             url = f"""https://api.hrfco.go.kr/{Variable.get('water_api_key')}/waterlevel/list/1D/{id}/{date[0]}/{date[1]}.json"""
             response = requests.get(url)
@@ -153,19 +226,26 @@ def get_entire_stream_waterlevel_list(*dates):
             try:
                 elements = data["content"]
             except KeyError: # 철원군(삼합교)의 경우 데이터 수집되고 있지 않음
-                print(f"{id}: {data}")
+                logging.warning(f"{id}: {data}")
                 continue
 
             for element in elements:
-                entire_list.append([element["wlobscd"].strip(), element["ymdhm"].strip(), element["wl"].strip(), element["fw"].strip()])
-            print(f"year - idx>> {date} - {idx}")
-
-            idx += 1
-            time.sleep(0.5)
+                record = [element["wlobscd"].strip(), element["ymdhm"].strip(), element["wl"].strip(), element["fw"].strip()]
+                new_record = insert_history_time(record, now_str, today)
+                entire_list.append(new_record)
+            
+            time.sleep(0.1)
 
         with open(f"/opt/airflow/data/water_level_data_{date[2]}.csv", "w") as file:
             writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
             writer.writerows(entire_list)
+        
+        logging.info(f"{date} year - {len(entire_list) - 1} loading complete.")
+
+        # list 초기화
+        entire_list = entire_list[:1]
+    
+    return dates
 
 def get_associate_stream_list(**context):
     entire_list = [["obs_id", "river", "rel_river", "opened_at", "first_at", "last_at"]]
@@ -180,21 +260,18 @@ def get_associate_stream_list(**context):
         try:
             elements = data["list"][0]
         except:
-            print(f"{id}: {data}")
+            logging.warning(f"{id}: {data}")
             missing_cnt += 1
             continue
 
         entire_list.append([str(elements["wlobscd"]).strip(), str("NULL" if elements.get("rivnm") is None else elements.get("rivnm")).strip(), str(elements["bbsncd"]).strip(), 
-                            str(elements["obsopndt"]).strip(), str(elements["sistartobsdh"]).strip() + ":00:00", str(elements["siendobsdh"]).strip() + ":00:00"])
+                            str(elements["obsopndt"]).strip(), str("NULL" if elements.get("sistartobsdh") is None else elements.get("sistartobsdh") + ":00:00").strip(), str("NULL" if elements.get("siendobsdh") is None else elements.get("siendobsdh") + ":00:00").strip()])
     
-    print(f"entire_list_count: {len(entire_list) - 1}, missing_count: {missing_cnt}")
+    logging.info(f"entire_list_count: {len(entire_list) - 1}, missing_count: {missing_cnt}")
 
     with open("/opt/airflow/data/waterlevel/associate_list.csv", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
         writer.writerows(entire_list)
-
-def upload_to_s3():
-    s3.upload_to_s3(s3_conn_id, s3_bucket, s3_key, [path], True)
 
 task1 = PythonOperator(
     task_id='collect_entire_stream_list',
@@ -217,7 +294,7 @@ task3 = BashOperator(
 task4 = PythonOperator(
     task_id='collect_entire_stream_level_list',
     python_callable=get_entire_stream_waterlevel_list,
-    #op_args=['2023'],
+    provide_context=True,
     dag=dag
 )
 
@@ -226,7 +303,7 @@ task5 = SQLExecuteQueryOperator(
     conn_id = redshift_conn_id,
     sql = f"""
     CREATE TABLE IF NOT EXISTS {schema}.{tables_info[0]["table_name"]} ({",".join(tables_info[0]["table_schema"])});
-    CREATE TABLE IF NOT EXISTS {schema}.{tables_info[1]["table_name"]} ({",".join(tables_info[1]["table_schema"])});
+    CREATE TABLE IF NOT EXISTS {schema}.{tables_info[1]["table_name"]} ({",".join(tables_info[1]["table_schema"])}) DISTSTYLE KEY DISTKEY(obs_id) SORTKEY(obs_date);
     """,
     autocommit = True,
     split_statements = True,
@@ -240,7 +317,7 @@ task6_1 = PythonOperator(
     params = {
         "table": tables_info[0]["table_name"],
         "s3_key": f"""waterlevel/{tables_info[0]["table_name"]}.csv""",
-        "date": None
+        "flag": False
     },
     dag = dag
 )
@@ -248,10 +325,11 @@ task6_1 = PythonOperator(
 task6_2 = PythonOperator(
     task_id = 'copy_{}_to_s3'.format(tables_info[1]["table_name"]),
     python_callable = copy_to_s3,
+    provide_context=True,
     params = {
         "table": tables_info[1]["table_name"],
-        "s3_key": f"""waterlevel/{tables_info[1]["table_name"]}_202407.csv""",
-        "date": "202407"
+        "s3_key": f"""waterlevel/{tables_info[1]["table_name"]}_DATE.csv""",
+        "flag": True
     },
     dag = dag
 )
@@ -262,9 +340,10 @@ task7_1 = S3ToRedshiftOperator(
     s3_key = f"""waterlevel/{tables_info[0]["table_name"]}.csv""",
     schema = schema,
     table = tables_info[0]["table_name"],
-    column_list = ["obs_id","obs_name","lat","lon","gov_agency","attn_level","warn_level","danger_level","river","rel_river","opened_at","first_at","last_at"],
-    copy_options = ["csv", "IGNOREHEADER AS 1", "QUOTE AS '\"'", "DELIMITER ','", "EMPTYASNULL", "DATEFORMAT AS 'auto'", "ACCEPTANYDATE TIMEFORMAT AS 'YYYYMMDDHH24:MI:SS'"],
+    column_list = ["obs_id","obs_name","lat","lon","gov_agency","attn_level","warn_level","danger_level","river","rel_river","opened_at","first_at","last_at","data_key","created_at","updated_at"],
+    copy_options = ["csv", "IGNOREHEADER AS 1", "QUOTE AS '\"'", "DELIMITER ','", "EMPTYASNULL", "DATEFORMAT AS 'auto'", "ACCEPTANYDATE TIMEFORMAT AS 'YYYYMMDDHH:MI:SS'"],
     method = 'REPLACE',
+    # upsert_keys = ["obs_id"],
     redshift_conn_id = redshift_conn_id,
     aws_conn_id = s3_conn_id,
     dag = dag
@@ -273,11 +352,12 @@ task7_1 = S3ToRedshiftOperator(
 task7_2 = S3ToRedshiftOperator(
     task_id = 'run_copy_sql_{}'.format(tables_info[1]["table_name"]),
     s3_bucket = s3_bucket,
-    s3_key = f"""waterlevel/{tables_info[1]["table_name"]}_202407.csv""",
+    s3_key = f"""waterlevel/{tables_info[1]["table_name"]}_""",
     schema = schema,
     table = tables_info[1]["table_name"],
     copy_options = ["csv", "IGNOREHEADER AS 1", "QUOTE AS '\"'", "DELIMITER ','", "TIMEFORMAT AS 'auto'"],
-    method = 'REPLACE',
+    method = 'UPSERT',
+    upsert_keys = ["obs_id", "obs_date"],
     redshift_conn_id = redshift_conn_id,
     aws_conn_id = s3_conn_id,
     dag = dag

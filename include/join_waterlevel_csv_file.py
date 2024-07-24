@@ -16,6 +16,20 @@ merged_data = pd.merge(list_data, associate_data, left_on='obs_id', right_on='ob
 merged_data = merged_data.dropna(subset=['attn_level', 'warn_level', 'danger_level', 'rel_river', 'first_at'])
 merged_data = merged_data[(merged_data['attn_level'] != '') & (merged_data['warn_level'] != '') & (merged_data['danger_level'] != '') & (merged_data['rel_river'] != '') & (merged_data['first_at'] != '')]
 
+# 현재 시간
+now = pd.Timestamp.today(tz='Asia/Seoul').strftime('%Y%m%d%H:%M:%S')
+# 오늘 날짜
+today = pd.Timestamp.today(tz='Asia/Seoul').replace(tzinfo=None)
+
+# last_at 컬럼을 datetime 형식으로 변환
+merged_data['last_at'] = pd.to_datetime(merged_data['last_at'], format='%Y%m%d%H:%M:%S')
+
+# data_key, created_at, updated_at 컬럼 추가 및 updated_at 포맷 통일
+merged_data['data_key'] = now
+merged_data['created_at'] = merged_data['first_at']
+merged_data['updated_at'] = merged_data['last_at'].apply(lambda x: now if 0 <= (today - x).total_seconds() < 3600 else x.strftime("%Y%m%d%H:%M:%S"))
+merged_data['last_at'] = merged_data['last_at'].dt.strftime("%Y%m%d%H:%M:%S")
+
 # 결과 저장
 output_file_path = '/opt/airflow/data/info/water_level_info.csv'
 merged_data.to_csv(output_file_path, index=False, quoting=csv.QUOTE_ALL)
