@@ -3,9 +3,7 @@ import json
 import csv
 import time
 import logging
-
-from pytz import timezone
-from datetime import datetime, timedelta
+import pendulum
 
 from airflow import DAG
 from airflow.models import Variable
@@ -17,7 +15,6 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 
 from plugins import s3
 
-local_tz = timezone('Asia/Seoul')
 redshift_conn_id = "AWS_Redshift" # 'redshift_dev_db'
 s3_conn_id = "AWS_S3" # 'aws_conn_choi'
 s3_bucket = "team-okky-1-bucket" # 'yonggu-practice-bucket'
@@ -60,16 +57,16 @@ tables_info = [
 
 default_args = {
     'owner': 'yonggu',
-    'start_date': datetime(2024, 7, 23, tzinfo=local_tz),
+    'start_date': pendulum.datetime(2024, 7, 23, tz='Asia/Seoul'),
     'email': ['yonggu.choi.14@gmail.com'],
     'retries': 1,
-    'retry_delay': timedelta(minutes=3),
+    'retry_delay': pendulum.duration(minutes=3),
     'max_active_runs': 1,
 }
 
 dag = DAG(
     dag_id="stream_rainfall_collection", # DAG name
-    schedule_interval='0 1,6,10 * * *',
+    schedule_interval='0 10,15,19 * * *',
     tags=['stream_rainfall_check'],
     catchup=True,
     default_args=default_args 
@@ -130,11 +127,11 @@ def read_csv_file(file_path):
 
 def convert_date_pair(dates, now):
     date_pair = []
-    curr_end_date = now.strftime('%Y%m%d')
+    curr_end_date = now.format('YYYYMMDD')
 
     if not dates:
         # 현재 달의 첫날
-        start_date = now.replace(day=1).strftime('%Y%m%d')
+        start_date = now.set(day=1).format('YYYYMMDD')
         date_pair = [(start_date, curr_end_date, start_date[:6])]
     else:
         for year in dates:
@@ -142,15 +139,15 @@ def convert_date_pair(dates, now):
                 year_int = int(year)
                 start_date = f"{year}0101"
                 end_date = f"{year}1231"
-                end_date = datetime.strptime(end_date, '%Y%m%d').date()
+                end_date = pendulum.from_format(end_date, 'YYYYMMDD').date()
 
                 # 오늘에 해당하는 달(ex. 2024-07-17 -> 202407) 이후 데이터는 수집하지 않음
                 if now.date() < end_date:
-                    last_month_date = now.replace(day=1) - timedelta(days=1)
-                    end_date = last_month_date.strftime('%Y%m%d')
+                    last_month_date = now.set(day=1).subtract(days=1)
+                    end_date = last_month_date.format('YYYYMMDD')
                 # 오늘에 해당하는 달 데이터 수집
                 else:
-                    end_date = end_date.strftime('%Y%m%d')
+                    end_date = end_date.format('YYYYMMDD')
 
                 date_pair.append((start_date, end_date, year))
             except ValueError:
@@ -165,7 +162,7 @@ def insert_history_time(record, now, today):
     obs_id, obs_date, rainfall = record
     
     # 생성 시간: obs_date를 사용
-    created_at = datetime.strptime(obs_date, '%Y%m%d').strftime('%Y-%m-%d %H:%M:%S')
+    created_at = pendulum.from_format(obs_date, 'YYYYMMDD').format('YYYY-MM-DD HH:mm:SS')
     
     # 수정 시간: obs_date가 오늘 날짜인 경우 현재 시간으로 설정
     if obs_date == today:
@@ -187,9 +184,10 @@ def get_entire_stream_rainfall_list(**kwargs):
 
     logging.info(f"row count>> {len(row)}")
 
-    now = kwargs["execution_date"].in_timezone('Asia/Seoul')
-    now_str = now.strftime('%Y-%m-%d %H:%M:%S')
-    today = now.strftime('%Y%m%d')
+    dag_date = kwargs["data_interval_end"]
+    now = dag_date.in_timezone('Asia/Seoul')
+    now_str = now.format('YYYY-MM-DD HH:mm:ss')
+    today = now.format('YYYYMMDD')
 
     # DAG 실행 전 conf 파라미터 전달받아 실행하고자 하는 시작 연도, 종료 연도 입력
     conf = kwargs['dag_run'].conf
