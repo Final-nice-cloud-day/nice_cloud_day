@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
-from datetime import datetime, timedelta
 import requests
 import csv
 from io import StringIO
@@ -15,11 +14,11 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': pendulum.datetime(2024, 7, 24, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': pendulum.duration(minutes=5),
 }
 
 def fct_medm_reg_to_s3(**kwargs):
@@ -58,8 +57,8 @@ def fct_medm_reg_to_s3(**kwargs):
                     if len(columns) >= 5:
                         try:
                             reg_id = columns[0]
-                            tm_st = datetime.strptime(columns[1], '%Y%m%d%H%M')
-                            tm_ed = datetime.strptime(columns[2], '%Y%m%d%H%M')
+                            tm_st = pendulum.parse(columns[1], strict=False, tz=kst) if columns[1] else None
+                            tm_ed = pendulum.parse(columns[2], strict=False, tz=kst) if columns[2] else None
                             reg_sp = columns[3]
                             reg_name = ' '.join(columns[4:])
                             data.append((reg_id, tm_st, tm_ed, reg_sp, reg_name))
@@ -106,7 +105,7 @@ def fct_medm_reg_to_s3(**kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def fct_medm_reg_to_redshift(data_interval_start, **kwargs):
+def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_medm_reg_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -123,10 +122,13 @@ def fct_medm_reg_to_redshift(data_interval_start, **kwargs):
     for row in csv_reader:
         try:
             reg_id, tm_st, tm_ed, reg_sp, reg_name = row
-            data_key = data_interval_start + timedelta(hours=9)
+            #data_key = data_interval_end.in_timezone(kst)
+            data_key = data_interval_end + pendulum.duration(hours=9)
+            # Ensure tm_ef is a pendulum DateTime object with the correct timezone
+            tm_ed = pendulum.parse(tm_ed, tz=kst) if isinstance(tm_ed, str) else tm_ed
             created_at = tm_st
             updated_at = tm_st
-            if tm_ed == datetime(2100, 12, 31, 0, 0, 0):
+            if tm_ed == pendulum.datetime(2100, 12, 31, 0, 0, 0, tz=kst):
                 data.append((reg_id, tm_st, tm_ed, reg_sp, reg_name, data_key, created_at, updated_at))
         except ValueError as e:
             logging.warning(f"ERROR : 파싱오류: {row}, error: {e}")
@@ -166,7 +168,7 @@ def fct_medm_reg_to_redshift(data_interval_start, **kwargs):
         WHERE f.REG_ID IS NULL;
         """
         try:
-            execute_values(cursor, insert_query, data)
+            cursor.execute(insert_query)
             conn.commit()
             logging.info(f"Redshift 적재 완료: {s3_path}")
         except Exception as e:
@@ -177,11 +179,11 @@ def fct_medm_reg_to_redshift(data_interval_start, **kwargs):
   
 
 with DAG(
-    'Daily_1_fct_medm_reg_to_s3_and_redshift',
+    'Daily_1_fct_medm_reg_to_s3_and_redshift_v1.02',
     default_args=default_args,
     description='fct_medm_reg upload to S3 and redshift',
     schedule_interval='0 7 * * *',
-    catchup=False,
+    catchup=True,
 ) as dag:
     dag.timezone = kst
     

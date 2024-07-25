@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
-from datetime import datetime, timedelta
 import requests
 import csv
 from io import StringIO
@@ -16,20 +15,20 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': pendulum.datetime(2024, 7, 1, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': pendulum.duration(minutes=5),
 }
     
-def fct_afs_wl_to_s3(data_interval_start, **kwargs):
+def fct_afs_wl_to_s3(data_interval_end, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/fct_afs_wl.php"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     
-    data_interval_start_kst = data_interval_start.in_timezone(kst)
+    data_interval_end_kst = data_interval_end.in_timezone(kst)
     
-    one_hour_before = data_interval_start_kst - timedelta(hours=1)
+    one_hour_before = data_interval_end_kst - pendulum.duration(hours=1)
     tmfc1 = one_hour_before.strftime('%Y%m%d%H')
     
     tmfc2 = one_hour_before.strftime('%Y%m%d%H')
@@ -77,8 +76,8 @@ def fct_afs_wl_to_s3(data_interval_start, **kwargs):
 
                     try:
                         reg_id = columns[0]
-                        tm_st = datetime.strptime(columns[1], '%Y%m%d%H%M') if columns[1] else None
-                        tm_ed = datetime.strptime(columns[2], '%Y%m%d%H%M') if columns[2] else None
+                        tm_st = pendulum.parse(columns[1], strict=False) if columns[1] else None
+                        tm_ed = pendulum.parse(columns[2], strict=False) if columns[2] else None
                         mod = columns[3]
                         stn = columns[4]
                         c = columns[5]
@@ -130,7 +129,7 @@ def fct_afs_wl_to_s3(data_interval_start, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
 
-def fct_afs_wl_to_redshift(data_interval_start, **kwargs):
+def fct_afs_wl_to_redshift(data_interval_end, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='fct_afs_wl_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -148,7 +147,8 @@ def fct_afs_wl_to_redshift(data_interval_start, **kwargs):
     for row in csv_reader:
         try:
             reg_id, tm_st, tm_ed, mood_key, stn_id, cnt_cd, wf_sky_cd, wf_pre_cd, conf_lv, wf_info, rn_st = row
-            data_key = data_interval_start + timedelta(hours=9)
+            #data_key = data_interval_end.in_timezone(kst)
+            data_key = data_interval_end + pendulum.duration(hours=9)
             created_at = tm_st
             updated_at = tm_st
             data.append((reg_id, tm_st, tm_ed, mood_key, stn_id, cnt_cd, wf_sky_cd, wf_pre_cd, conf_lv, wf_info, rn_st, data_key, created_at, updated_at))
@@ -178,12 +178,12 @@ def fct_afs_wl_to_redshift(data_interval_start, **kwargs):
     
 
 with DAG(
-    'Daily_2_fct_afs_wl_to_s3_and_redshift',
+    'Daily_2_fct_afs_wl_to_s3_and_redshift_v1.00',
     default_args=default_args,
     description='fct_afs_wl upload to S3 and Redshift',
     schedule_interval='0 7,19 * * *',
     catchup=True,
-    dagrun_timeout=timedelta(hours=2)
+    dagrun_timeout=pendulum.duration(hours=2)
 ) as dag:
     dag.timezone = kst
     
@@ -191,14 +191,14 @@ with DAG(
         task_id='fct_afs_wl_to_s3',
         python_callable=fct_afs_wl_to_s3,
         provide_context=True,
-        execution_timeout=timedelta(hours=1),
+        execution_timeout=pendulum.duration(hours=1),
     )
     
     fct_afs_wl_to_redshift_task = PythonOperator(
         task_id='fct_afs_wl_to_redshift',
         python_callable=fct_afs_wl_to_redshift,
         provide_context=True,
-        execution_timeout=timedelta(hours=1),
+        execution_timeout=pendulum.duration(hours=1),
     )
 
     fct_afs_wl_to_s3_task >> fct_afs_wl_to_redshift_task

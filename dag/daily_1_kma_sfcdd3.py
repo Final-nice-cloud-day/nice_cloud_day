@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
-from datetime import datetime, timedelta
 import requests
 import csv
 from io import StringIO
@@ -16,11 +15,11 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': pendulum.datetime(2024, 7, 1, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': pendulum.duration(minutes=5),
 }
 
 def parse_fixed_width(line):
@@ -29,12 +28,12 @@ def parse_fixed_width(line):
     
     return columns
     
-def kma_sfcdd3_to_s3(data_interval_start, **kwargs):
+def kma_sfcdd3_to_s3(data_interval_end, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/kma_sfcdd3.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     
-    data_interval_start_kst = data_interval_start.in_timezone(kst)
-    date_str = data_interval_start_kst.strftime('%Y%m%d')
+    data_interval_end_kst = data_interval_end.in_timezone(kst)
+    date_str = data_interval_end_kst.strftime('%Y%m%d')
     
     params = {
     'tm1' : date_str,
@@ -107,8 +106,6 @@ def kma_sfcdd3_to_s3(data_interval_start, **kwargs):
                     )
                     logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
                     kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
-                    logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
-                    kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
                 except Exception as e:
                     logging.error(f"S3 업로드 실패: {e}")
                     raise ValueError(f"S3 업로드 실패: {e}")
@@ -123,7 +120,7 @@ def kma_sfcdd3_to_s3(data_interval_start, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
 
-def kma_stcdd3_to_redshift(data_interval_start, **kwargs):
+def kma_stcdd3_to_redshift(data_interval_end, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='kma_sfcdd3_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -147,9 +144,10 @@ def kma_stcdd3_to_redshift(data_interval_start, **kwargs):
                 rn_day, rn_d99, rn_dur, rn_60m_max, rn_60m_max_tm, rn_10m_max, rn_10m_max_tm, rn_pow_max, \
                 rn_pow_max_tm, sd_new, sd_new_tm, sd_max, sd_max_tm, te_05, te_10, te_15, te_30, te_50 = row
 
-            data_key = data_interval_start + timedelta(hours=9)
-            created_at = datetime.strptime(tm, '%Y%m%d')
-            updated_at = datetime.strptime(tm, '%Y%m%d')
+            #data_key = data_interval_end.in_timezone(kst)
+            data_key = data_interval_end + pendulum.duration(hours=9)
+            created_at = pendulum.parse(tm, strict=False)
+            updated_at = pendulum.parse(tm, strict=False)
             data.append((tm, stn, ws_avg, wr_day, wd_max, ws_max, ws_max_tm, wd_ins, ws_ins, ws_ins_tm, 
                             ta_avg, ta_max, ta_max_tm, ta_min, ta_min_tm, td_avg, ts_avg, tg_min, hm_avg, 
                             hm_min, hm_min_tm, pv_avg, ev_s, ev_l, fg_dur, pa_avg, ps_avg, ps_max, ps_max_tm, 
@@ -190,25 +188,25 @@ def kma_stcdd3_to_redshift(data_interval_start, **kwargs):
 
 
 with DAG(
-    'Daily_1_kma_sfcdd3_to_s3_and_redshift',
+    'Daily_1_kma_sfcdd3_to_s3_and_redshift_v1.00',
     default_args=default_args,
     description='kma_sfcdd3 upload to S3',
     schedule_interval='0 7 * * *',
     catchup=True,
-    dagrun_timeout=timedelta(hours=2),
+    dagrun_timeout=pendulum.duration(hours=2),
 ) as dag:
     dag.timezone = kst
     
     kma_sfcdd3_to_s3_task = PythonOperator(
         task_id='kma_sfcdd3_to_s3',
         python_callable=kma_sfcdd3_to_s3,
-        execution_timeout=timedelta(hours=1),
+        execution_timeout=pendulum.duration(hours=1),
     )
     
     kma_sfcdd3_to_redshift_task = PythonOperator(
         task_id='kma_stcdd3_to_redshift',
         python_callable=kma_stcdd3_to_redshift,
-        execution_timeout=timedelta(hours=1),
+        execution_timeout=pendulum.duration(hours=1),
     )
 
     kma_sfcdd3_to_s3_task >> kma_sfcdd3_to_redshift_task

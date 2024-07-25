@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
-from datetime import datetime, timedelta
 import requests
 import csv
 from io import StringIO
@@ -17,14 +16,14 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': pendulum.datetime(2024, 7, 24, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': pendulum.duration(minutes=5),
 }
 
-def stn_inf_to_s3(data_interval_start_kst, **kwargs):
+def stn_inf_to_s3(data_interval_end, **kwargs):
     api_url = "https://apihub.kma.go.kr/api/typ01/url/stn_inf.php?"
     api_key = "HGbLr74hS2qmy6--ITtqog"
     params = {
@@ -81,11 +80,11 @@ def stn_inf_to_s3(data_interval_start_kst, **kwargs):
                         logging.warning(f"행을 파싱하는 중 오류 발생: {e}")
                 
             if data:
-                data_interval_start_kst = data_interval_start_kst.in_timezone(kst)
-                year = data_interval_start_kst.strftime('%Y')
-                month = data_interval_start_kst.strftime('%m')
-                day = data_interval_start_kst.strftime('%d')
-                formatted_date = data_interval_start_kst.strftime('%Y_%m_%d')
+                data_interval_end_kst = data_interval_end.in_timezone(kst)
+                year = data_interval_end_kst.strftime('%Y')
+                month = data_interval_end_kst.strftime('%m')
+                day = data_interval_end_kst.strftime('%d')
+                formatted_date = data_interval_end_kst.strftime('%Y_%m_%d')
 
                 csv_buffer = StringIO()
                 csv_writer = csv.writer(csv_buffer)
@@ -119,7 +118,7 @@ def stn_inf_to_s3(data_interval_start_kst, **kwargs):
         logging.error(f"ERROR : 메세지 :", response.text)
         raise ValueError(f"ERROR : 응답코드오류 {response.status_code}, 메세지 : {response.text}")
     
-def stn_inf_to_redshift(data_interval_start, **kwargs):
+def stn_inf_to_redshift(data_interval_end, **kwargs):
     logging.info("redshift 적재 시작")
     s3_key = kwargs['task_instance'].xcom_pull(task_ids='stn_inf_to_s3', key='s3_key')
     s3_path = f's3://team-okky-1-bucket/{s3_key}'
@@ -136,7 +135,8 @@ def stn_inf_to_redshift(data_interval_start, **kwargs):
     for row in csv_reader:
         try:
             stn_id, lon, lat, stn_sp, ht, ht_pa, ht_ta, ht_wd, ht_rn, stn_ad, stn_ko, stn_en, fct_id, law_id, basin = row
-            data_key = data_interval_start + timedelta(hours=9)
+            #data_key = data_interval_end.in_timezone(kst)
+            data_key = data_interval_end + pendulum.duration(hours=9)
             created_at = data_key
             updated_at = data_key
             data.append((stn_id, lon, lat, stn_sp, ht, ht_pa, ht_ta, ht_wd, ht_rn, stn_ad, stn_ko, stn_en, fct_id, law_id, basin, data_key, created_at, updated_at))
@@ -199,25 +199,25 @@ def stn_inf_to_redshift(data_interval_start, **kwargs):
     
     
 with DAG(
-    'Daily_1_stn_inf_to_s3_and_redshif',
+    'Daily_1_stn_inf_to_s3_and_redshif_v1.00',
     default_args=default_args,
     description='stn_inf upload to S3',
     schedule_interval='0 7 * * *',
     catchup=True,
-    dagrun_timeout=timedelta(hours=2),
+    dagrun_timeout=pendulum.duration(hours=2),
 ) as dag:
     dag.timezone = kst
     
     stn_inf_to_s3_task = PythonOperator(
         task_id='stn_inf_to_s3',
         python_callable=stn_inf_to_s3,
-        execution_timeout=timedelta(hours=1),
+        execution_timeout=pendulum.duration(hours=1),
     )
     
     stn_inf_to_redshift_task = PythonOperator(
         task_id='stn_inf_to_redshift',
         python_callable=stn_inf_to_redshift,
-        execution_timeout=timedelta(hours=1),
+        execution_timeout=pendulum.duration(hours=1),
     )
 
     stn_inf_to_s3_task  >> stn_inf_to_redshift_task
