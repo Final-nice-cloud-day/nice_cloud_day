@@ -1,6 +1,20 @@
 import csv
 import pandas as pd
 
+# 위도와 경도 변환 함수
+def conversion(old):
+    try:
+        new = old.split("-")
+        if len(new) != 3:
+            raise ValueError("Invalid input format")
+        degrees = int(new[0])
+        minutes = int(new[1])
+        seconds = int(new[2])
+        return degrees + minutes / 60.0 + seconds / 3600.0
+    except Exception as e:
+        print(f"Error converting {old}: {e}")
+        return None
+
 # 데이터 로드
 list_data = pd.read_csv("/opt/airflow/data/waterlevel/list.csv", header=0)
 associate_data = pd.read_csv("/opt/airflow/data/waterlevel/associate_list.csv", header=0)
@@ -29,6 +43,10 @@ merged_data['data_key'] = now
 merged_data['created_at'] = merged_data['first_at']
 merged_data['updated_at'] = merged_data['last_at'].apply(lambda x: now if 0 <= (today - x).total_seconds() < 3600 else x.strftime("%Y%m%d%H:%M:%S"))
 merged_data['last_at'] = merged_data['last_at'].dt.strftime("%Y%m%d%H:%M:%S")
+
+# 위도와 경도를 수치형 데이터로 변환
+merged_data['lat'] = merged_data['lat'].apply(conversion)
+merged_data['lon'] = merged_data['lon'].apply(conversion)
 
 # 결과 저장
 output_file_path = '/opt/airflow/data/info/water_level_info.csv'
