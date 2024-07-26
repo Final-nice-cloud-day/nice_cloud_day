@@ -185,13 +185,13 @@ kst = pendulum.timezone("Asia/Seoul")  # 스케줄링 한국시간 기준으로
 
 default_args = {
     'owner': 'airflow',
-    'start_date': pendulum.datetime(2024, 7, 24, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 1, tz=kst),
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=5)
 }
 
 dag = DAG(
-    'fct_afs_dl_to_s3_redshift_v3_0726',
+    'fct_afs_dl_to_s3_redshift_v2',
     default_args=default_args,
     description='단기육상예보 fct_afs_dl upload to S3 // S3 to Redshift',
     schedule_interval='0 6,12,18 * * *',

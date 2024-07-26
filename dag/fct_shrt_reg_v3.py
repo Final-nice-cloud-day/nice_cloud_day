@@ -176,7 +176,7 @@ default_args = {
 }
 
 dag = DAG(
-    'fct_shrt_reg_to_s3_redshift_v7',
+    'fct_shrt_reg_to_s3_redshift_v3',
     default_args=default_args,
     description='단기예보구역 fct_shrt_reg_to_s3 // S3 to Redshift',
     schedule_interval='0 6,12,18 * * *',
