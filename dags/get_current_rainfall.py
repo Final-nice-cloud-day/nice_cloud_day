@@ -355,4 +355,10 @@ task7_2 = S3ToRedshiftOperator(
     dag = dag
 )
 
-task1 >> task2 >> task3 >> task4 >> task5 >> task6_1 >> task6_2 >> task7_1 >> task7_2
+task8 = BashOperator(
+    task_id='convert_rainfall_summary_table',
+    bash_command='python /opt/airflow/include/convert_rainfall_summary_table.py',
+    dag=dag
+)
+
+task1 >> task2 >> task3 >> task4 >> task5 >> task6_1 >> task6_2 >> task7_1 >> task7_2 >> task8

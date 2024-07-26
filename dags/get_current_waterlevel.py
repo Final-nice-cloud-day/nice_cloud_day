@@ -72,7 +72,8 @@ dag = DAG(
     schedule_interval='0 11,16,20 * * *',
     tags=['water_level_check'],
     catchup=True,
-    default_args=default_args
+    default_args=default_args,
+    template_searchpath=[f"{Variable.get('INCLUDE_DIR')}"],
 )
 
 def copy_to_s3(**context):
@@ -361,4 +362,14 @@ task7_2 = S3ToRedshiftOperator(
     dag = dag
 )
 
-task1 >> task2 >> task3 >> task4 >> task5 >> task6_1 >> task6_2 >> task7_1 >> task7_2
+task8 = SQLExecuteQueryOperator(
+    task_id = 'convert_water_level_summary_table',
+    conn_id = redshift_conn_id,
+    sql = "convert_water_level_summary_table.sql",
+    autocommit = True,
+    split_statements = True,
+    return_last = False,
+    dag = dag
+)
+
+task1 >> task2 >> task3 >> task4 >> task5 >> task6_1 >> task6_2 >> task7_1 >> task7_2 >> task8
