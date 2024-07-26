@@ -11,24 +11,27 @@ import pendulum
 from airflow.models import Variable
 
 def fct_shrt_reg_to_s3(**kwargs):
-    logical_date = kwargs.get('logical_date')
-    
+    logical_date = kwargs.get('data_interval_end')
+
     # 한국 시간대 설정
     local_tz = pendulum.timezone("Asia/Seoul")
     local_execution_date = logical_date.in_timezone(local_tz)
 
-    if local_execution_date.hour in [6, 12, 18]:
-        if local_execution_date.hour == 6:
+    # 정확한 데이터 시간을 계산하기 위해 1시간 빼기
+    data_time = local_execution_date.subtract(hours=1)
+
+    if data_time.hour in [5, 11, 17]:
+        if data_time.hour == 5:
             current_hour = "05"
-            current_time = local_execution_date.replace(hour=5).strftime('%Y%m%d%H')
+            current_time = data_time.strftime('%Y%m%d%H')
             logging.info(f"current_time(KST) : {current_time}")
-        elif local_execution_date.hour == 12:
+        elif data_time.hour == 11:
             current_hour = "11"
-            current_time = local_execution_date.replace(hour=11).strftime('%Y%m%d%H')
+            current_time = data_time.strftime('%Y%m%d%H')
             logging.info(f"current_time(KST) : {current_time}")
-        elif local_execution_date.hour == 18:
+        elif data_time.hour == 17:
             current_hour = "17"
-            current_time = local_execution_date.replace(hour=17).strftime('%Y%m%d%H')
+            current_time = data_time.strftime('%Y%m%d%H')
             logging.info(f"current_time(KST) : {current_time}")
     else:
         raise ValueError("이 DAG는 오직 6, 12, 18시에만 동작합니다.")
@@ -72,10 +75,10 @@ def fct_shrt_reg_to_s3(**kwargs):
             raise ValueError("Invalid data format: Missing start or end markers")
 
     except requests.exceptions.HTTPError as http_err:
-        logging.error(f"HTTP error occurred: {http_err}")
+        logging.error(f"HTTP 에러 발생: {http_err}")
         raise
     except Exception as err:
-        logging.error(f"Other error occurred: {err}")
+        logging.error(f"예상하지 못한 에러 발생: {err}")
         raise
         
     df['TM_ST'] = pd.to_datetime(df['TM_ST'], format='%Y%m%d%H%M')
@@ -100,14 +103,78 @@ def fct_shrt_reg_to_s3(**kwargs):
     except Exception as e:
         logging.error(f"파일 업로드 실패 (경로 : {s3_file_path}): {e}")
 
-    # Redshift 연결 설정
+    return s3_file_path
+
+def load_to_redshift(**kwargs):
+    logical_date = kwargs.get('data_interval_end')
+    
+    # 한국 시간대 설정
+    local_tz = pendulum.timezone("Asia/Seoul")
+    local_execution_date = logical_date.in_timezone(local_tz)
+
+    # 정확한 데이터 시간을 계산하기 위해 1시간 빼기
+    data_time = local_execution_date.subtract(hours=1)
+
+    if data_time.hour in [5, 11, 17]:
+        if data_time.hour == 5:
+            current_time = data_time.strftime('%Y%m%d%H')
+            logging.info(f"current_time(KST) : {current_time}")
+        elif data_time.hour == 11:
+            current_time = data_time.strftime('%Y%m%d%H')
+            logging.info(f"current_time(KST) : {current_time}")
+        elif data_time.hour == 17:
+            current_time = data_time.strftime('%Y%m%d%H')
+            logging.info(f"current_time(KST) : {current_time}")
+    else:
+        raise ValueError("이 DAG는 오직 6, 12, 18시에만 동작합니다.")
+    
+    ti = kwargs['ti']
+    s3_file_path = ti.xcom_pull(task_ids='fct_shrt_reg_to_s3')
+    s3_bucket = 'team-okky-1-bucket'
+    
+    s3_hook = S3Hook(aws_conn_id='AWS_S3')
+
+    s3_object = s3_hook.get_key(s3_file_path, bucket_name=s3_bucket)
+    s3_data = s3_object.get()['Body'].read().decode('utf-8')
+
+    df = pd.read_csv(StringIO(s3_data))
+    logging.info("데이터프레임 첫 몇 줄:\n%s", df.head())
+
+    # 새로운 컬럼 추가
+    df['DATA_KEY'] = pd.to_datetime(current_time, format='%Y%m%d%H', errors='coerce')
+    df['CREATE_AT'] = df['TM_ST']
+    df['UPDATE_AT'] = df['TM_ST']
+    logging.info("데이터프레임 필수 컬럼 추가:\n%s", df.head())
+
+    # 컬럼 형식 변환
+    df['TM_ED'] = pd.to_datetime(df['TM_ED'], errors='coerce')
+    df['CREATE_AT'] = pd.to_datetime(df['CREATE_AT'], errors='coerce')
+    df['UPDATE_AT'] = pd.to_datetime(df['UPDATE_AT'], errors='coerce')
+
+    df_filtered = df[df['TM_ED'].dt.year == 2100]
+
+    logging.info("필터링된 데이터프레임 첫 몇 줄:\n%s", df_filtered.head())
+
+    csv_buffer = StringIO()
+    df_filtered.to_csv(csv_buffer, index=False)
+
+    modified_s3_file_path = s3_file_path.replace('fct_shrt_reg_info_', 'modified_fct_shrt_reg_info_')
+    s3_hook.load_string(
+        csv_buffer.getvalue(),
+        key=modified_s3_file_path,
+        bucket_name=s3_bucket,
+        replace=True
+    )
+
     redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
     conn = redshift_hook.get_conn()
     cursor = conn.cursor()
 
+    truncate_sql = "TRUNCATE TABLE raw_data.fct_shrt_reg_list;"
+    
     copy_sql = f"""
-        COPY raw_data.temp_fct_shrt_reg_list
-        FROM 's3://team-okky-1-bucket/{s3_folder_path}/fct_shrt_reg_info_{current_time}.csv'
+        COPY raw_data.fct_shrt_reg_list
+        FROM 's3://{s3_bucket}/{modified_s3_file_path}'
         IAM_ROLE 'arn:aws:iam::862327261051:role/service-role/AmazonRedshift-CommandsAccessRole-20240716T180249'
         CSV
         IGNOREHEADER 1
@@ -116,9 +183,12 @@ def fct_shrt_reg_to_s3(**kwargs):
     """
 
     try:
+        cursor.execute(truncate_sql)
+        logging.info("테이블 비우기 성공")
+
         cursor.execute(copy_sql)
         conn.commit()
-        logging.info(f"데이터 적재 성공 'WH_FCT_SHRT_REG_LIST'.")
+        logging.info(f"데이터 적재 성공 'fct_shrt_reg_list'.")
     except Exception as e:
         conn.rollback()
         logging.error(f"데이터 적재 실패: {e}")
@@ -126,18 +196,20 @@ def fct_shrt_reg_to_s3(**kwargs):
         cursor.close()
         conn.close()
 
+local_tz = pendulum.timezone("Asia/Seoul") # 스케줄링을 한국 시간 기준으로 하기 위해서 설정
+
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime(2024, 7, 20),
+    'start_date': datetime(2024, 7, 22, tzinfo=local_tz),
     'retries': 1,
     'retry_delay': timedelta(minutes=5)
 }
 
 dag = DAG(
-    'fct_shrt_reg_to_s3',
+    'fct_shrt_reg_to_s3_redshift_v2',
     default_args=default_args,
-    description='단기 예보구역 fct_shrt_reg_to_s3 // S3 to Redshift',
-    schedule_interval='0 21,3,9 * * *',  # UTC 기준, KST로는 6시, 12시, 18시
+    description='단기예보구역 fct_shrt_reg_to_s3 // S3 to Redshift',
+    schedule_interval='0 6,12,18 * * *',
     catchup=True
 )
 
@@ -148,4 +220,11 @@ fct_shrt_reg_to_s3_task = PythonOperator(
     dag=dag
 )
 
-fct_shrt_reg_to_s3_task
+load_to_redshift_task = PythonOperator(
+    task_id='load_to_redshift',
+    python_callable=load_to_redshift,
+    provide_context=True,
+    dag=dag
+)
+
+fct_shrt_reg_to_s3_task >> load_to_redshift_task
