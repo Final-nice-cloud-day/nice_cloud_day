@@ -14,7 +14,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id='test_dummy_dag',
+    dag_id='test_dummy_dag_update(20:14)',
     default_args=default_args,
     description='A simple test DAG',
     schedule_interval='@daily',
