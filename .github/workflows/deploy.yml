@@ -3,10 +3,10 @@ name: Deploy DAGs to Airflow
 on:
   push:
     branches:
-      - dev
+      - main
   pull_request: 
     branches:
-      - dev
+      - main
 
 jobs:
   deploy:
@@ -38,7 +38,7 @@ jobs:
 
     - name: Deploy DAGs to EC2
       run: |
-        ssh -o StrictHostKeyChecking=no ubuntu@ec2-43-201-188-19.ap-northeast-2.compute.amazonaws.com 'aws s3 sync s3://team-okky-1-bucket/dags/ /home/ubuntu/airflow/dags && sudo systemctl restart airflow-scheduler'
+        ssh -o StrictHostKeyChecking=no ubuntu@ec2-43-201-188-19.ap-northeast-2.compute.amazonaws.com 'aws s3 sync s3://team-okky-1-bucket/dags/ /home/ubuntu/airflow/dags'
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
