@@ -36,9 +36,9 @@ WITH river_sido_counts AS (
     SELECT
         rel_river,
         split_part(addr, ' ', 1) as sido,
-        COUNT(split_part(addr, ' ', 1)) as sido_count
+        COUNT(sido) as sido_count
     FROM raw_data.rainfall_info
-    WHERE split_part(addr, ' ', 1) IS NOT NULL
+    WHERE sido IS NOT NULL
     GROUP BY rel_river, sido
 ),
 total_river_counts AS (
@@ -57,8 +57,8 @@ filtered_sido_rivers AS (
     INNER JOIN total_river_counts trc
     ON rsc.rel_river = trc.rel_river
     WHERE
-        trc.total_sido_count < 30
-        OR (trc.total_sido_count >= 30 AND rsc.sido_count > 5)
+        trc.total_sido_count < 20
+        OR (trc.total_sido_count >= 20 AND rsc.sido_count >= 3)
 )
 SELECT
     rd.obs_date,
