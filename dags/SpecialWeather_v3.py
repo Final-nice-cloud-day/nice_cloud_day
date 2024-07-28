@@ -14,7 +14,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 7, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': datetime(2020, 1, 1, 7, 0, 0, tzinfo=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -22,8 +22,8 @@ default_args = {
 }
 
 def special_weather_to_s3(start_date, end_date):
-    api_url = "https://apihub.kma.go.kr/api/typ01/url/wrn_met_data.php?"
-    api_key = "b5G4PidGSZORuD4nRvmTow"
+    api_url = "https://apihub-org.kma.go.kr/api/typ01/url/wrn_met_data.php?"
+    api_key = "SVszY16IQS6bM2NeiIEu4Q"
 
     current_date = start_date
 
@@ -33,14 +33,14 @@ def special_weather_to_s3(start_date, end_date):
         params = {
             "tmfc1": current_date.strftime("%Y%m%d%H%M"),
             "tmfc2": next_date.strftime("%Y%m%d%H%M"),
-            "subcd": 11,
+            # "subcd": 11,
             "disp": 0,
             "help": 0,
             "authKey": api_key
         }
 
         response = requests.get(api_url, params=params)
-
+        print(api_url, params)
         if response.status_code == 200:
             response_text = response.text
             lines = response_text.splitlines()
@@ -273,8 +273,8 @@ with DAG(
 ) as dag:
     dag.timezone = kst
 
-    start_date = datetime(2024, 7, 1, tzinfo=kst)
-    end_date = datetime.now(tz=kst)
+    start_date = datetime(2024, 7, 25, 7, 0, 0, tzinfo=kst)
+    end_date = pendulum.now(tz=kst)
 
     # Generate and run tasks for each date in the range
     tasks = generate_date_tasks(start_date, end_date)
