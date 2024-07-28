@@ -16,7 +16,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': pendulum.datetime(2024, 7, 27, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -70,10 +70,18 @@ def stn_inf_to_s3(data_interval_end, **kwargs):
                         ht_rn = columns[8]
                         stn_ad = columns[9]
                         stn_ko = columns[10]
-                        stn_en = columns[11]
-                        fct_id = columns[12]
-                        law_id = columns[13]
-                        basin = columns[14]
+
+                        # stn_en에서 공백이 포함된 경우를 처리
+                        if len(columns) == 15:
+                            stn_en = columns[11]
+                            fct_id = columns[12]
+                            law_id = columns[13]
+                            basin = columns[14]
+                        elif len(columns) > 15:
+                            stn_en = ' '.join(columns[11:-3])
+                            fct_id = columns[-3]
+                            law_id = columns[-2]
+                            basin = columns[-1]
                         data.append((stn_id, lon, lat, stn_sp, ht, ht_pa, ht_ta, ht_wd, ht_rn, stn_ad, stn_ko, stn_en, fct_id, law_id, basin))
                            
                     except ValueError as e:
@@ -149,46 +157,65 @@ def stn_inf_to_redshift(data_interval_end, **kwargs):
         conn = redshift_hook.get_conn()
         cursor = conn.cursor()
 
-        # 적재를 위한 temp 테이블 생성
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS temp_STN_INF_INFO (
-            STN_ID	VARCHAR(3)	NOT NULL,
-            LON_DEGRE	DECIMAL(10, 7)	NULL,
-            LAT_DEGRE	DECIMAL(10, 7)	NULL,
-            STN_SP	VARCHAR(5)	NULL,
-            HT_M	DECIMAL(5, 2)	NULL,
-            HT_PA	DECIMAL(5, 2)	NULL,
-            HT_TA	DECIMAL(3, 2)	NULL,
-            HT_WD	DECIMAL(4, 2)	NULL,
-            HT_RN	DECIMAL(3, 2)	NULL,
-            STN_AD	VARCHAR(6)	NULL,
-            STN_KO	VARCHAR(20)	NULL,
-            STN_EN	VARCHAR(20)	NULL,
-            FCT_ID	VARCHAR(8)	NULL,
-            LAW_ID	VARCHAR(10)	NULL,
-            BASIN_CD	VARCHAR(10)	NULL,
+            STN_ID VARCHAR(3) NOT NULL,
+            LON_DEGRE DECIMAL(10, 7) NULL,
+            LAT_DEGRE DECIMAL(10, 7) NULL,
+            STN_SP VARCHAR(5) NULL,
+            HT_M DECIMAL(5, 2) NULL,
+            HT_PA DECIMAL(5, 2) NULL,
+            HT_TA DECIMAL(3, 2) NULL,
+            HT_WD DECIMAL(4, 2) NULL,
+            HT_RN DECIMAL(3, 2) NULL,
+            STN_AD VARCHAR(6) NULL,
+            STN_KO VARCHAR(20) NULL,
+            STN_EN VARCHAR(20) NULL,
+            FCT_ID VARCHAR(8) NULL,
+            LAW_ID VARCHAR(10) NULL,
+            BASIN_CD VARCHAR(10) NULL,
             DATA_KEY TIMESTAMP NULL,
             CREATED_AT TIMESTAMP NULL,
             UPDATED_AT TIMESTAMP NULL
         );
         """)
+        cursor.execute("TRUNCATE TABLE temp_STN_INF_INFO;")
         
         insert_temp_query = """
         INSERT INTO temp_STN_INF_INFO (STN_ID, LON_DEGRE, LAT_DEGRE, STN_SP, HT_M, HT_PA, HT_TA, HT_WD, HT_RN, STN_AD, STN_KO, STN_EN, FCT_ID, LAW_ID, BASIN_CD, DATA_KEY, CREATED_AT, UPDATED_AT)
         VALUES %s;
         """
         execute_values(cursor, insert_temp_query, data)
+
+        merge_query = """
+        MERGE INTO raw_data.stn_inf_info AS target
+        USING temp_STN_INF_INFO AS source
+        ON target.STN_ID = source.STN_ID
+        WHEN MATCHED THEN
+        UPDATE SET
+            LON_DEGRE = source.LON_DEGRE,
+            LAT_DEGRE = source.LAT_DEGRE,
+            STN_SP = source.STN_SP,
+            HT_M = source.HT_M,
+            HT_PA = source.HT_PA,
+            HT_TA = source.HT_TA,
+            HT_WD = source.HT_WD,
+            HT_RN = source.HT_RN,
+            STN_AD = source.STN_AD,
+            STN_KO = source.STN_KO,
+            STN_EN = source.STN_EN,
+            FCT_ID = source.FCT_ID,
+            LAW_ID = source.LAW_ID,
+            BASIN_CD = source.BASIN_CD,
+            DATA_KEY = source.DATA_KEY,
+            UPDATED_AT = source.UPDATED_AT
+        WHEN NOT MATCHED THEN
+        INSERT (STN_ID, LON_DEGRE, LAT_DEGRE, STN_SP, HT_M, HT_PA, HT_TA, HT_WD, HT_RN, STN_AD, STN_KO, STN_EN, FCT_ID, LAW_ID, BASIN_CD, DATA_KEY, CREATED_AT, UPDATED_AT)
+        VALUES (source.STN_ID, source.LON_DEGRE, source.LAT_DEGRE, source.STN_SP, source.HT_M, source.HT_PA, source.HT_TA, source.HT_WD, source.HT_RN, source.STN_AD, source.STN_KO, source.STN_EN, source.FCT_ID, source.LAW_ID, source.BASIN_CD, source.DATA_KEY, source.CREATED_AT, source.UPDATED_AT);
+    """
         
-        insert_query = """
-        INSERT INTO raw_data.stn_inf_info (STN_ID, LON_DEGRE, LAT_DEGRE, STN_SP, HT_M, HT_PA, HT_TA, HT_WD, HT_RN, STN_AD, STN_KO, STN_EN, FCT_ID, LAW_ID, BASIN_CD, DATA_KEY, CREATED_AT, UPDATED_AT)
-        SELECT t.STN_ID, t.LON_DEGRE, t.LAT_DEGRE, t.STN_SP, t.HT_M, t.HT_PA, t.HT_TA, t.HT_WD, t.HT_RN, t.STN_AD, t.STN_KO, t.STN_EN, t.FCT_ID, t.LAW_ID, t.BASIN_CD, t.DATA_KEY, t.CREATED_AT, t.UPDATED_AT
-        FROM temp_STN_INF_INFO t
-        LEFT JOIN raw_data.stn_inf_info f
-        ON t.STN_ID = f.STN_ID
-        WHERE f.STN_ID IS NULL;
-        """
         try:
-            cursor.execute(insert_query)
+            cursor.execute(merge_query)
             conn.commit()
             logging.info(f"Redshift 적재 완료: {s3_path}")
         except Exception as e:
@@ -199,12 +226,13 @@ def stn_inf_to_redshift(data_interval_end, **kwargs):
     
     
 with DAG(
-    'Daily_1_stn_inf_to_s3_and_redshif_v1.00',
+    'stn_inf_to_s3_and_redshif_v1.00',
     default_args=default_args,
     description='stn_inf upload to S3',
     schedule_interval='0 7 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),
+    tags=['Daily', '1time'],
 ) as dag:
     dag.timezone = kst
     

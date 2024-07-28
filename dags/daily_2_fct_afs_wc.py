@@ -15,7 +15,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': pendulum.datetime(2024, 7, 27, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 1, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -180,12 +180,13 @@ def fct_afs_wc_to_redshift(data_interval_end, **kwargs):
         raise ValueError("ERROR : 적재할 데이터가 없습니다.")
 
 with DAG(
-    'Daily_2_fct_afs_wc_to_s3_and_redshift',
+    'fct_afs_wc_to_s3_and_redshift_v1.00',
     default_args=default_args,
     description='fct_afs_wc upload to S3 and Redshift',
     schedule_interval='0 7,19 * * *',
     catchup=True,
-    dagrun_timeout=pendulum.duration(hours=2)
+    dagrun_timeout=pendulum.duration(hours=2),
+    tags=['Daily', '2time'],
 ) as dag:
     dag.timezone = kst
     

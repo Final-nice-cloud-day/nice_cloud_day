@@ -141,17 +141,18 @@ def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
 
         # 적재를 위한 temp
         cursor.execute("""
-        CREATE TEMP TABLE temp_fct_medm_reg_list (
-            REG_ID VARCHAR(256),
-            TM_ST TIMESTAMP,
-            TM_ED TIMESTAMP,
-            REG_SP VARCHAR(256),
-            REG_NAME VARCHAR(256),
-            DATA_KEY TIMESTAMP,
-            CREATED_AT TIMESTAMP,
-            UPDATED_AT TIMESTAMP
+        CREATE TABLE IF NOT EXISTS temp_fct_medm_reg_list (
+            REG_ID VARCHAR(256) NULL,
+            TM_ST TIMESTAMP NULL,
+            TM_ED TIMESTAMP NULL,
+            REG_SP VARCHAR(256) NULL,
+            REG_NAME VARCHAR(256) NULL,
+            DATA_KEY TIMESTAMP NULL,
+            CREATED_AT TIMESTAMP NULL,
+            UPDATED_AT TIMESTAMP NULL
         );
         """)
+        cursor.execute("TRUNCATE TABLE temp_fct_medm_reg_list;")
         
         insert_temp_query = """
         INSERT INTO temp_fct_medm_reg_list (REG_ID, TM_ST, TM_ED, REG_SP, REG_NAME, DATA_KEY, CREATED_AT, UPDATED_AT)
@@ -159,16 +160,28 @@ def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
         """
         execute_values(cursor, insert_temp_query, data)
         
-        insert_query = """
-        INSERT INTO raw_data.fct_medm_reg_list (REG_ID, TM_ST, TM_ED, REG_SP, REG_NAME, DATA_KEY, CREATED_AT, UPDATED_AT)
-        SELECT t.REG_ID, t.TM_ST, t.TM_ED, t.REG_SP, t.REG_NAME, t.DATA_KEY, t.CREATED_AT, t.UPDATED_AT
-        FROM temp_fct_medm_reg_list t
-        LEFT JOIN raw_data.fct_medm_reg_list f
-        ON t.REG_ID = f.REG_ID AND t.TM_ST = f.TM_ST AND t.TM_ED = f.TM_ED
-        WHERE f.REG_ID IS NULL;
+        merge_query = """
+        MERGE INTO raw_data.fct_medm_reg_list
+        USING temp_fct_medm_reg_list AS source
+        ON raw_data.fct_medm_reg_list.REG_ID = source.REG_ID 
+        AND raw_data.fct_medm_reg_list.TM_ST = source.TM_ST 
+        AND raw_data.fct_medm_reg_list.TM_ED = source.TM_ED
+        WHEN MATCHED THEN
+        UPDATE SET
+            REG_SP = source.REG_SP,
+            TM_ST = source.TM_ST,
+            TM_ED = source.TM_ED,
+            REG_NAME = source.REG_NAME,
+            DATA_KEY = source.DATA_KEY,
+            CREATED_AT = source.CREATED_AT,
+            UPDATED_AT = source.UPDATED_AT
+        WHEN NOT MATCHED THEN
+        INSERT (REG_ID, TM_ST, TM_ED, REG_SP, REG_NAME, DATA_KEY, CREATED_AT, UPDATED_AT)
+        VALUES (source.REG_ID, source.TM_ST, source.TM_ED, source.REG_SP, source.REG_NAME, source.DATA_KEY, source.CREATED_AT, source.UPDATED_AT);
         """
+        
         try:
-            cursor.execute(insert_query)
+            cursor.execute(merge_query)
             conn.commit()
             logging.info(f"Redshift 적재 완료: {s3_path}")
         except Exception as e:
@@ -179,11 +192,12 @@ def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
   
 
 with DAG(
-    'Daily_1_fct_medm_reg_to_s3_and_redshift_v1.02',
+    'fct_medm_reg_to_s3_and_redshift_v1.00',
     default_args=default_args,
     description='fct_medm_reg upload to S3 and redshift',
     schedule_interval='0 7 * * *',
     catchup=True,
+    tags=['Daily', '1time'],
 ) as dag:
     dag.timezone = kst
     

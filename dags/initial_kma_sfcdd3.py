@@ -187,12 +187,13 @@ def kma_stcdd3_to_redshift(data_interval_end, **kwargs):
 
 
 with DAG(
-    'Initial_kma_sfcdd3_to_s3_and_redshift_v1.00',
+    'kma_sfcdd3_to_s3_and_redshift_v1.00',
     default_args=default_args,
     description='kma_sfcdd3 upload to S3',
     schedule_interval=None,
     catchup=False,
     dagrun_timeout=pendulum.duration(hours=2),
+    tags=['Inital'],
 ) as dag:
     dag.timezone = kst
     

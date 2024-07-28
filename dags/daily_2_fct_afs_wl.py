@@ -178,12 +178,13 @@ def fct_afs_wl_to_redshift(data_interval_end, **kwargs):
     
 
 with DAG(
-    'Daily_2_fct_afs_wl_to_s3_and_redshift_v1.00',
+    'fct_afs_wl_to_s3_and_redshift_v1.00',
     default_args=default_args,
     description='fct_afs_wl upload to S3 and Redshift',
     schedule_interval='0 7,19 * * *',
     catchup=True,
-    dagrun_timeout=pendulum.duration(hours=2)
+    dagrun_timeout=pendulum.duration(hours=2),
+    tags=['Daily', '2time'],
 ) as dag:
     dag.timezone = kst
     
