@@ -2,46 +2,46 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
-from datetime import datetime, timedelta
+import pendulum
 import requests
 import pandas as pd
 import io
 import time
-import pendulum
 
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2020, 1, 1, 7, 0, 0, tzinfo=kst),
+    'start_date': pendulum.datetime(2020, 1, 1, 7, 0, 0, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'retry_delay': timedelta(minutes=1),
+    'retry_delay': pendulum.duration(minutes=5),
 }
 
 def special_weather_to_s3(start_date, end_date):
     api_url = "https://apihub-org.kma.go.kr/api/typ01/url/wrn_met_data.php?"
     api_key = "SVszY16IQS6bM2NeiIEu4Q"
+    s3_hook = S3Hook(aws_conn_id='AWS_S3')
+    bucket_name = 'team-okky-1-bucket'
 
     current_date = start_date
 
     while current_date < end_date:
-        next_date = current_date + timedelta(days=1)
+        next_date = current_date.add(days=1)
         
         params = {
-            "tmfc1": current_date.strftime("%Y%m%d%H%M"),
-            "tmfc2": next_date.strftime("%Y%m%d%H%M"),
-            # "subcd": 11,
+            "tmfc1": current_date.format("YYYYMMDDHHmm"),
+            "tmfc2": next_date.format("YYYYMMDDHHmm"),
             "disp": 0,
             "help": 0,
             "authKey": api_key
         }
 
-        response = requests.get(api_url, params=params)
-        print(api_url, params)
-        if response.status_code == 200:
+        try:
+            response = requests.get(api_url, params=params)
+            response.raise_for_status()
             response_text = response.text
             lines = response_text.splitlines()
             columns = lines[1].strip('#').split(',')
@@ -53,7 +53,7 @@ def special_weather_to_s3(start_date, end_date):
 
             if not df.empty:
                 now = pendulum.now('Asia/Seoul')
-                data_key = now.strftime('%Y-%m-%d %H:%M')
+                data_key = now.format('YYYY-MM-DD HH:mm')
                 df['data_key'] = data_key
 
                 for col in ['TM_FC', 'TM_IN', 'TM_EF']:
@@ -67,35 +67,31 @@ def special_weather_to_s3(start_date, end_date):
                 df['created_at'] = pd.to_datetime(df['TM_FC']).dt.strftime('%Y-%m-%d %H:%M')
                 df['updated_at'] = pd.to_datetime(df['TM_IN']).dt.strftime('%Y-%m-%d %H:%M')
 
-                year = current_date.strftime('%Y')
-                month = current_date.strftime('%m')
-                day = current_date.strftime('%d')
-                formatted_date = current_date.strftime('%Y_%m_%d')
+                year = current_date.format('YYYY')
+                month = current_date.format('MM')
+                day = current_date.format('DD')
+                formatted_date = current_date.format('YYYY_MM_DD')
 
                 csv_buffer = io.StringIO()
                 df.to_csv(csv_buffer, index=False, date_format='%Y-%m-%d %H:%M', encoding='utf-8-sig')
                 
-                s3_hook = S3Hook(aws_conn_id='AWS_S3')
-                bucket_name = 'team-okky-1-bucket'
                 s3_key = f'special_weather/{year}/{month}/{day}/{formatted_date}_special_weather.csv'
                 
-                try:
-                    s3_hook.load_string(
-                        csv_buffer.getvalue(),
-                        key=s3_key,
-                        bucket_name=bucket_name,
-                        replace=True
-                    )
-                    print(f"Successfully saved data for {formatted_date}")
-                except Exception as e:
-                    print(f"S3 upload failed for {formatted_date}: {e}")
-                    raise ValueError(f"S3 upload failed: {e}")
+                s3_hook.load_string(
+                    csv_buffer.getvalue(),
+                    key=s3_key,
+                    bucket_name=bucket_name,
+                    replace=True
+                )
+                print(f"Successfully saved data for {formatted_date}")
             else:
                 print(f"No valid data to insert for {formatted_date}")
-        else:
-            print(f"API request failed: {response.status_code}")
-            print("Message:", response.text)
-            raise ValueError(f"API request failed: {response.status_code}, Message: {response.text}")
+        except requests.HTTPError as e:
+            print(f"API request failed for {current_date.format('YYYY-MM-DD')}: {e}")
+            raise
+        except Exception as e:
+            print(f"Failed to process data for {current_date.format('YYYY-MM-DD')}: {e}")
+            raise
 
         current_date = next_date
         time.sleep(1)
@@ -112,7 +108,6 @@ def preprocess_data_in_s3(year, month, day):
         data = s3_hook.read_key(key=s3_key, bucket_name=bucket_name)
         df = pd.read_csv(io.StringIO(data))
 
-        # 컬럼 수정/제거 작업을 수행합니다.
         df = df.drop(columns=['TM_FC', 'TM_IN'])
 
         lvl_mapping = {
@@ -155,7 +150,6 @@ def preprocess_data_in_s3(year, month, day):
         df['CNT'] = df['CNT'].astype(int)
         df['RPT'] = df['RPT'].astype(int)
 
-
         csv_buffer = io.StringIO()
         df.to_csv(csv_buffer, index=False, date_format='%Y-%m-%d %H:%M', encoding='utf-8-sig')
 
@@ -168,7 +162,7 @@ def preprocess_data_in_s3(year, month, day):
         print(f"Successfully preprocessed data for {formatted_date}")
     except Exception as e:
         print(f"Data preprocessing failed for {formatted_date}: {e}")
-        raise ValueError(f"Data preprocessing failed: {e}")
+        raise
 
 def create_table_if_not_exists(redshift_hook):
     create_table_query = """
@@ -212,69 +206,39 @@ def load_s3_to_redshift(year, month, day):
         print(f"Successfully copied data for {formatted_date} to Redshift")
     except Exception as e:
         print(f"Redshift copy failed for {formatted_date}: {e}")
-        raise ValueError(f"Redshift copy failed: {e}")
+        raise
 
-def generate_date_tasks(start_date, end_date):
-    tasks = []
-    current_date = start_date
 
-    while current_date <= end_date:
-        year = current_date.strftime('%Y')
-        month = current_date.strftime('%m')
-        day = current_date.strftime('%d')
-
-        # Create task for special_weather_to_s3
-        special_weather_to_s3_task = PythonOperator(
-            task_id=f'special_weather_to_s3_{current_date.strftime("%Y%m%d")}',
-            python_callable=special_weather_to_s3,
-            op_kwargs={
-                'start_date': current_date,
-                'end_date': current_date + timedelta(days=1),
-            },
-        )
-
-        # Create task for preprocess_data_in_s3
-        preprocess_data_task = PythonOperator(
-            task_id=f'preprocess_data_in_s3_{current_date.strftime("%Y%m%d")}',
-            python_callable=preprocess_data_in_s3,
-            op_kwargs={
-                'year': year,
-                'month': month,
-                'day': day,
-            },
-        )
-
-        # Create task for load_s3_to_redshift
-        load_s3_to_redshift_task = PythonOperator(
-            task_id=f'load_s3_to_redshift_{current_date.strftime("%Y%m%d")}',
-            python_callable=load_s3_to_redshift,
-            op_kwargs={
-                'year': year,
-                'month': month,
-                'day': day,
-            },
-        )
-
-        # Define task dependencies
-        special_weather_to_s3_task >> preprocess_data_task >> load_s3_to_redshift_task
-
-        tasks.extend([special_weather_to_s3_task, preprocess_data_task, load_s3_to_redshift_task])
-
-        current_date += timedelta(days=1)
-    
-    return tasks
-
-with DAG(
-    'special_weather_v3',
+dag = DAG(
+    'weather_data_pipeline',
     default_args=default_args,
-    description='Special weather data upload to S3 and Redshift with preprocessing',
-    schedule_interval='0 7 * * *',
-    catchup=False,
-) as dag:
-    dag.timezone = kst
+    description='A simple DAG to process weather data',
+    schedule_interval='@daily',
+)
 
-    start_date = datetime(2024, 7, 25, 7, 0, 0, tzinfo=kst)
-    end_date = pendulum.now(tz=kst)
+# Define tasks
+start_date = pendulum.datetime(2021, 1, 1, tz=kst)
+end_date = pendulum.now(tz=kst).add(days=1) 
 
-    # Generate and run tasks for each date in the range
-    tasks = generate_date_tasks(start_date, end_date)
+task1 = PythonOperator(
+    task_id='fetch_weather_data',
+    python_callable=special_weather_to_s3,
+    op_args=[start_date, end_date],
+    dag=dag,
+)
+
+task2 = PythonOperator(
+    task_id='preprocess_weather_data',
+    python_callable=preprocess_data_in_s3,
+    op_args=[start_date.format('YYYY'), start_date.format('MM'), start_date.format('DD')],
+    dag=dag,
+)
+
+task3 = PythonOperator(
+    task_id='load_data_to_redshift',
+    python_callable=load_s3_to_redshift,
+    op_args=[start_date.format('YYYY'), start_date.format('MM'), start_date.format('DD')],
+    dag=dag,
+)
+
+task1 >> task2 >> task3
