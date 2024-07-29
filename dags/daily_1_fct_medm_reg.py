@@ -124,7 +124,6 @@ def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
             reg_id, tm_st, tm_ed, reg_sp, reg_name = row
             #data_key = data_interval_end.in_timezone(kst)
             data_key = data_interval_end + pendulum.duration(hours=9)
-            # Ensure tm_ef is a pendulum DateTime object with the correct timezone
             tm_ed = pendulum.parse(tm_ed, tz=kst) if isinstance(tm_ed, str) else tm_ed
             created_at = tm_st
             updated_at = tm_st
@@ -192,7 +191,7 @@ def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
   
 
 with DAG(
-    'fct_medm_reg_to_s3_and_redshift_v1.00',
+    'fct_medm_reg_to_s3_and_redshift',
     default_args=default_args,
     description='fct_medm_reg upload to S3 and redshift',
     schedule_interval='0 7 * * *',

@@ -226,7 +226,7 @@ def stn_inf_to_redshift(data_interval_end, **kwargs):
     
     
 with DAG(
-    'stn_inf_to_s3_and_redshif_v1.00',
+    'stn_inf_to_s3_and_redshif',
     default_args=default_args,
     description='stn_inf upload to S3',
     schedule_interval='0 7 * * *',

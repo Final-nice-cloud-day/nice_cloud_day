@@ -180,7 +180,7 @@ def fct_afs_wc_to_redshift(data_interval_end, **kwargs):
         raise ValueError("ERROR : 적재할 데이터가 없습니다.")
 
 with DAG(
-    'fct_afs_wc_to_s3_and_redshift_v1.00',
+    'fct_afs_wc_to_s3_and_redshift',
     default_args=default_args,
     description='fct_afs_wc upload to S3 and Redshift',
     schedule_interval='0 7,19 * * *',

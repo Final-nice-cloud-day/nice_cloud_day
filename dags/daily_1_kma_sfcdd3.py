@@ -188,7 +188,7 @@ def kma_stcdd3_to_redshift(data_interval_end, **kwargs):
 
 
 with DAG(
-    'kma_sfcdd3_to_s3_and_redshift_v1.00',
+    'kma_sfcdd3_to_s3_and_redshift',
     default_args=default_args,
     description='kma_sfcdd3 upload to S3',
     schedule_interval='0 7 * * *',
