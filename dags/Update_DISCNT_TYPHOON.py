@@ -1,8 +1,7 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from datetime import datetime
-import pytz
+import pendulum
 import requests
 
 def get_Redshift_connection(autocommit=True):
@@ -12,9 +11,7 @@ def get_Redshift_connection(autocommit=True):
     return conn.cursor()
 
 def etl():
-    kst = pytz.timezone('Asia/Seoul')
-    now = datetime.now(kst)
-    now = now.strftime('%Y-%m-%d %H:%M:%S')
+    now = pendulum.now('Asia/Seoul').format('YYYY-MM-DD HH:mm:ss')
 
     cur = get_Redshift_connection()
     url = 'https://apihub.kma.go.kr/api/typ01/url/typ_lst.php'
@@ -51,7 +48,7 @@ def etl():
 dag = DAG(
     'Update_DISCNT_TYPHOON',
     description='Update 2024 TYPHOON DIS_CNT data in Redshift',
-    start_date=datetime(2024, 7, 20, 0, 0),
+    start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 0 * * *',  # 매일 00시에 실행
     catchup=False
 )
