@@ -66,7 +66,7 @@ default_args = {
 
 dag = DAG(
     dag_id="stream_rainfall_collection", # DAG name
-    schedule_interval='0 10,15,19 * * *',
+    schedule_interval='30 09,13,17 * * *',
     tags=['stream_rainfall_check'],
     catchup=True,
     default_args=default_args 

@@ -69,7 +69,7 @@ default_args = {
 
 dag = DAG(
     dag_id="water_level_collection", # DAG name
-    schedule_interval='0 11,16,20 * * *',
+    schedule_interval='0 10,14,18 * * *',
     tags=['water_level_check'],
     catchup=True,
     default_args=default_args,

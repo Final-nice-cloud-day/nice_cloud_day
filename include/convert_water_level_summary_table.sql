@@ -63,6 +63,6 @@ CREATE OR REPLACE VIEW mart_data.water_level_detail AS
         AND wli.warn_level IS NOT NULL
         AND wli.danger_level IS NOT NULL
     ORDER BY 
-        wld.obs_date,
+        wld.obs_date DESC,
         wli.rel_river
 );
