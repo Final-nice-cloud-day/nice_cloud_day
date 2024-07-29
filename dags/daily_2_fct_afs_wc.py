@@ -13,9 +13,9 @@ import logging
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': pendulum.datetime(2024, 7, 1, tz=kst),
+    'owner': 'chansu',
+    'depends_on_past': True,  # 선행작업의존여부
+    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -186,7 +186,7 @@ with DAG(
     schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),
-    tags=['Daily', '2time'],
+    tags=['중기', 'Daily', '2 time', 'raw'],
 ) as dag:
     dag.timezone = kst
     

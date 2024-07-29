@@ -12,9 +12,9 @@ import logging
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,  # 선행작업의존여부N
-    'start_date': pendulum.datetime(2024, 7, 27, tz=kst),
+    'owner': 'chansu',
+    'depends_on_past': True,  # 선행작업의존여부
+    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -196,7 +196,7 @@ with DAG(
     description='fct_medm_reg upload to S3 and redshift',
     schedule_interval='0 7 * * *',
     catchup=True,
-    tags=['Daily', '1time'],
+    tags=['중기', 'Daily', '1 time', 'raw'],
 ) as dag:
     dag.timezone = kst
     
