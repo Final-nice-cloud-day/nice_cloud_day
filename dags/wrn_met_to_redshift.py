@@ -15,7 +15,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': pendulum.datetime(2022, 6, 27, 7, 0, 0, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 30, 7, 0, 0, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
