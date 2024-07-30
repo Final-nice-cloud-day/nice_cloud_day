@@ -9,7 +9,7 @@ local_tz = pendulum.timezone("Asia/Seoul")
 # Define the DAG
 default_args = {
     'owner': 'airflow',
-    'start_date': datetime(2024, 7, 30, tzinfo=local_tz),
+    'start_date': datetime(2024, 7, 25, tzinfo=local_tz),
     'retries': 1,
 }
 
