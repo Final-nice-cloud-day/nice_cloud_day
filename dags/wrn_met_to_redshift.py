@@ -15,7 +15,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': pendulum.datetime(2024, 7, 30, 7, 0, 0, tz=kst),
+    'start_date': pendulum.datetime(2022, 6, 27, 7, 0, 0, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -209,6 +209,65 @@ def create_table_if_not_exists(redshift_hook):
     """
     redshift_hook.run(create_table_query)
 
+def create_seasonal_warning_summary(**kwargs):
+    redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
+    
+    check_table_query = """
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables 
+        WHERE table_schema = 'mart_data'
+        AND table_name = 'seasonal_warning_summary'
+    );
+    """
+    
+    table_exists = redshift_hook.get_first(check_table_query)[0]
+    
+    if not table_exists:
+        create_table_query = """
+        CREATE TABLE mart_data.seasonal_warning_summary (
+            year INTEGER,
+            month INTEGER,
+            season VARCHAR(10),
+            WRN_ID VARCHAR(11),
+            total_warnings INTEGER
+        );
+        """
+        try:
+            redshift_hook.run(create_table_query)
+            print("Successfully created seasonal_warning_summary table")
+        except Exception as e:
+            print(f"Failed to create seasonal_warning_summary table: {e}")
+            raise
+    
+    truncate_query = "TRUNCATE TABLE mart_data.seasonal_warning_summary;"
+    
+    insert_query = """
+    INSERT INTO mart_data.seasonal_warning_summary
+    SELECT 
+        EXTRACT(YEAR FROM TM_EF) AS year,
+        EXTRACT(MONTH FROM TM_EF) AS month,
+        CASE 
+            WHEN EXTRACT(MONTH FROM TM_EF) IN (12, 1, 2) THEN 'Winter'
+            WHEN EXTRACT(MONTH FROM TM_EF) IN (3, 4, 5) THEN 'Spring'
+            WHEN EXTRACT(MONTH FROM TM_EF) IN (6, 7, 8) THEN 'Summer'
+            ELSE 'Fall'
+        END AS season,
+        WRN_ID,
+        COUNT(*) AS total_warnings
+    FROM raw_data.WRN_MET_DATA
+    GROUP BY year, month, season, WRN_ID
+    ORDER BY year, month;
+    """
+    
+    try:
+        redshift_hook.run(truncate_query)
+        redshift_hook.run(insert_query)
+        print("Successfully populated seasonal_warning_summary table")
+    except Exception as e:
+        print(f"Failed to populate seasonal_warning_summary table: {e}")
+        raise
+
 dag = DAG(
     'weather_data_pipeline_v33333',
     default_args=default_args,
@@ -216,7 +275,7 @@ dag = DAG(
     schedule_interval='0 09,18 * * *',
     start_date=pendulum.datetime(2024, 7, 30, tz=kst),
     catchup=False,
-    tags=['특보', 'raw_data', 'Daily', '2time'],
+    tags=['특보', 'raw_data', 'mart_data', 'Daily', '2time'],
 )
 
 task1 = PythonOperator(
@@ -240,4 +299,11 @@ task3 = PythonOperator(
     dag=dag,
 )
 
-task1 >> task2 >> task3
+task4 = PythonOperator(
+    task_id='create_seasonal_warning_summary',
+    python_callable=create_seasonal_warning_summary,
+    provide_context=True,
+    dag=dag,
+)
+
+task1 >> task2 >> task3 >> task4
