@@ -146,9 +146,9 @@ dag = DAG(
     'wrn_now_data_to_redshift',
     default_args=default_args,
     description='기상 데이터를 처리하고 enrich하는 DAG',
-    schedule_interval='0 8 * * *',
+    schedule_interval='0 */4 * * *',
     catchup=False,
-    tags=['특보', 'raw_data', 'Daily', '8time']
+    tags=['특보', 'raw_data', 'mart_data', 'Daily', '6time']
 )
 
 start_date = pendulum.datetime(2024, 7, 25, tz=kst)
