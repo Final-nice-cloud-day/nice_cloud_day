@@ -310,7 +310,7 @@ task6_1 = PythonOperator(
     python_callable = copy_to_s3,
     params = {
         "table": tables_info[0]["table_name"],
-        "s3_key": f"""rainfall/{tables_info[0]["table_name"]}.csv""",
+        "s3_key": f"""rainfall/info/{tables_info[0]["table_name"]}.csv""",
         "flag": False
     },
     dag = dag
@@ -330,7 +330,7 @@ task6_2 = PythonOperator(
 task7_1 = S3ToRedshiftOperator(
     task_id = 'run_copy_sql_{}'.format(tables_info[0]["table_name"]),
     s3_bucket = s3_bucket,
-    s3_key = f"""rainfall/{tables_info[0]["table_name"]}.csv""",
+    s3_key = f"""rainfall/info/{tables_info[0]["table_name"]}.csv""",
     schema = schema,
     table = tables_info[0]["table_name"],
     column_list = ["obs_id","obs_name","lat","lon","gov_agency","addr","etc_addr","rel_river","opened_at","first_at","last_at","data_key","created_at","updated_at"],
