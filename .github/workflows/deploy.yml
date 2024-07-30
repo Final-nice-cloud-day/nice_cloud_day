@@ -36,7 +36,7 @@ jobs:
       run: |
         aws s3 cp dags/ s3://team-okky-1-bucket/dags/ --recursive
         aws s3 cp data/ s3://team-okky-1-bucket/data/ --recursive
-        aws s3 cp include/ s3://team-okky-1-bucket/include/
+        aws s3 cp include/ s3://team-okky-1-bucket/include/ --recursive
 
     - name: Deploy DAGs to EC2
       run: |
