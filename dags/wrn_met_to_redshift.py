@@ -13,7 +13,7 @@ kst = pendulum.timezone("Asia/Seoul")
 
 # 기본 DAG 설정
 default_args = {
-    'owner': 'airflow',
+    'owner': 'doyoung',
     'depends_on_past': False,
     'start_date': pendulum.datetime(2022, 6, 27, 7, 0, 0, tz=kst),
     'email_on_failure': False,
