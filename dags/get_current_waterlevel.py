@@ -60,7 +60,7 @@ tables_info = [
 
 default_args = {
     'owner': 'yonggu',
-    'start_date': pendulum.datetime(2024, 7, 31, tz='Asia/Seoul'),
+    'start_date': pendulum.datetime(2024, 7, 31, 17, tz='Asia/Seoul'),
     'email': ['yonggu.choi.14@gmail.com'],
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=3),
@@ -69,7 +69,7 @@ default_args = {
 
 dag = DAG(
     dag_id="water_level_collection", # DAG name
-    schedule_interval='0 18 * * *',
+    schedule_interval='0 10,14,18 * * *',
     tags=['수위', 'Daily', '3 times', 'raw', 'mart'],
     catchup=True,
     default_args=default_args,
