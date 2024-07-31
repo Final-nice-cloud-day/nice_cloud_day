@@ -133,11 +133,7 @@ def mart_comr_api_iist():
         affected_rows = cursor.rowcount
         cursor.execute("TRUNCATE TABLE temp_comr_api_list;")
         conn.commit()
-        if affected_rows == 0:
-            logging.error("ERROR: 적재할 데이터가 없습니다.")
-            raise ValueError("ERROR: 적재할 데이터가 없습니다.")
-        else:
-            logging.info(f"성공적으로 적재된 행 수: {affected_rows}")
+        logging.info(f"성공적으로 적재된 행 수: {affected_rows}")
     except Exception as e:
         logging.error(f"Redshift 로드 실패: {e}")
         raise ValueError(f"Redshift 로드 실패: {e}")
