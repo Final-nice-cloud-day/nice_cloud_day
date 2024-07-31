@@ -97,11 +97,21 @@ def etl():
 
     cur.close()
 
+default_args = {
+    'owner': 'wonwoo',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+}
+
 dag = DAG(
     'Update_DISCNT_EQUAKE',
+    default_args=default_args,
     description='Update 2024 EQUAKE DIS_CNT data in Redshift',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 0 * * *',
+    tags=['기상청', 'Daily', '1 time', 'mart'],
     catchup=False
 )
 

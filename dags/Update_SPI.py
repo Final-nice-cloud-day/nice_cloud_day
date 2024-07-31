@@ -4,9 +4,10 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 import pendulum
 import requests
+import chardet
 import xml.etree.ElementTree as ET
 import pandas as pd
-import os
+import io
 
 S3_BUCKET_NAME = 'team-okky-1-bucket'
 HJDCD_FILE_KEY = 'SPI/hjdCd.csv'
@@ -15,7 +16,10 @@ SPI_FILE_KEY = 'SPI/2024_spi.csv'
 def get_filtered_area():
     s3 = S3Hook(aws_conn_id='AWS_S3')
     obj = s3.get_key(HJDCD_FILE_KEY, bucket_name=S3_BUCKET_NAME)
-    filtered_area = pd.read_csv(obj.get()['Body'])
+    raw_data = obj.get()['Body'].read()
+    result = chardet.detect(raw_data)
+    encoding = result['encoding']
+    filtered_area = pd.read_csv(io.BytesIO(raw_data), encoding=encoding)  # 감지된 인코딩 사용
     return filtered_area
 
 def get_Redshift_connection(autocommit=True):
@@ -26,7 +30,7 @@ def get_Redshift_connection(autocommit=True):
 
 def get_spi_data():
     key = 'RCcAK3YdiixgFhu5bAW3uDSK94160ypF5MiU5kA754R1vQRNoKcHZIByikIHK/0Q/oCHdxAdhZ1W415xKrFLlA=='
-    url = 'http://apis.data.go.kr/B500001/drghtIdexSpiAnals/analsInfoList' # 공공데이터 API
+    url = 'http://apis.data.go.kr/B500001/drghtIdexSpiAnals/analsInfoList'  # 공공데이터 API
     
     filtered_area = get_filtered_area()
     spi_items = []
@@ -68,7 +72,6 @@ def get_spi_data():
         anldt = item.find('anldt').text if item.find('anldt') is not None else None
         anlrst = item.find('anlrst').text if item.find('anlrst') is not None else None
         anlval = item.find('anlval').text if item.find('anlval') is not None else None
-        dv = item.find('dv').text if item.find('dv') is not None else None
         hjdcd = item.find('hjdcd').text if item.find('hjdcd') is not None else None
 
         data.append({
@@ -87,30 +90,41 @@ def update_s3_csv():
     
     # 기존 CSV 파일 읽기
     obj = s3.get_key(SPI_FILE_KEY, bucket_name=S3_BUCKET_NAME)
-    existing_df = pd.read_csv(obj.get()['Body'], encoding='euc-kr')
+    raw_data = obj.get()['Body'].read()
+    result = chardet.detect(raw_data)
+    encoding = result['encoding']
+    
+    existing_df = pd.read_csv(io.BytesIO(raw_data), encoding=encoding)
     
     # 새로운 데이터 가져오기
     new_data_df = get_spi_data()
     
     # 기존 데이터에 새로운 데이터 추가
     updated_df = pd.concat([existing_df, new_data_df], ignore_index=True)
+
+    new_data_df['anlval'] = pd.to_numeric(new_data_df['anlval'], errors='coerce')
     
-    # 로컬 파일로 저장
-    updated_df.to_csv('/tmp/2024_spi.csv', index=False, encoding='euc-kr')
+    # 메모리에 CSV 파일 저장
+    csv_buffer = io.StringIO()
+    updated_df.to_csv(csv_buffer, index=False, encoding='euc-kr')
     
     # S3에 업로드
-    s3.load_file('/tmp/2024_spi.csv', key=SPI_FILE_KEY, bucket_name=S3_BUCKET_NAME, replace=True)
-    
-    # 로컬 파일 삭제
-    os.remove('/tmp/2024_spi.csv')
+    s3.load_string(
+        string_data=csv_buffer.getvalue(),
+        key=SPI_FILE_KEY,
+        bucket_name=S3_BUCKET_NAME,
+        replace=True
+    )
 
     # 분석된 데이터를 필터링하여 적절한 레코드 찾기
-    filtered_df = updated_df[(updated_df['anlval'] > 2) | (updated_df['anlval'] < -2)]
+    filtered_df = new_data_df[(new_data_df['anlval'] > 2) | (new_data_df['anlval'] < -2)]
+    filtered_df['anldt'] = filtered_df['anldt'].astype(str)
+    filtered_df['anldt'] = pd.to_datetime(filtered_df['anldt'])
     
     if not filtered_df.empty:
         # 레드시프트 추가 데이터 삽입
         cur = get_Redshift_connection()
-        execution_time = pendulum.now('Asia/Seoul')
+        now = pendulum.now('Asia/Seoul').format('YYYY-MM-DD HH:mm:ss')
         
         flood_count = len(filtered_df[filtered_df['anlval'] > 2])
         drought_count = len(filtered_df[filtered_df['anlval'] < -2])
@@ -120,7 +134,7 @@ def update_s3_csv():
             cur.execute("""
                 INSERT INTO mart_data.SPI (anldt, anlrst, anlval, hjdcd, data_key, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (row['anldt'], row['anlrst'], row['anlval'], row['hjdcd'], execution_time, row['anldt'], execution_time))
+            """, (row['anldt'], row['anlrst'], row['anlval'], row['hjdcd'], now, row['anldt'], now))
         
         # FLOOD 및 DROUGHT 컬럼 업데이트
         cur.execute("""
@@ -129,15 +143,25 @@ def update_s3_csv():
                 DROUGHT = COALESCE(DROUGHT, 0) + %s,
                 updated_at = %s
             WHERE YEAR = '2024'
-        """, (flood_count, drought_count, execution_time))
+        """, (flood_count, drought_count, now))
         
         cur.close()
 
+default_args = {
+    'owner': 'wonwoo',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 0, 
+}
+
 dag = DAG(
     'Update_DISCNT_SPI',
+    default_args=default_args,
     description='Weekly update of SPI data',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 0 * * 4',  # 매주 목요일 00시에 실행
+    tags=['기상청', 'Weekly', '1 time', 'mart'],
     catchup=False
 )
 

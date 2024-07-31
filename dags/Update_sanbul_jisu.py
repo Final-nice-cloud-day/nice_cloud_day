@@ -102,11 +102,21 @@ def enrich_and_upload_data(**kwargs):
 
     cur.close()
 
+default_args = {
+    'owner': 'wonwoo',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+}
+
 dag = DAG(
     'Update_Sanbul_Jisu',
+    default_args=default_args,
     description='Fetch and update Sanbul Jisu data every 3 hours',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 */3 * * *',  # 매 3시간마다 실행
+    tags=['공공', 'Daily', '8 time', 'mart'],
     catchup=False
 )
 
