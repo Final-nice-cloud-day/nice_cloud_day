@@ -68,6 +68,7 @@ dag = DAG(
     dag_id="stream_rainfall_collection", # DAG name
     schedule_interval='30 09,13,17 * * *',
     tags=['강수량', 'Daily', '3 times', 'raw', 'mart'],
+    description="Get current each stream's rainfall data",
     catchup=True,
     default_args=default_args 
 )
