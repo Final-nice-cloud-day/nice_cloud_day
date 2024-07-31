@@ -188,9 +188,9 @@ def stn_inf_to_redshift(data_interval_end, **kwargs):
         execute_values(cursor, insert_temp_query, data)
 
         merge_query = """
-        MERGE INTO raw_data.stn_inf_info AS target
+        MERGE INTO raw_data.stn_inf_info
         USING temp_STN_INF_INFO AS source
-        ON target.STN_ID = source.STN_ID
+        ON raw_data.stn_inf_info.STN_ID = source.STN_ID
         WHEN MATCHED THEN
         UPDATE SET
             LON_DEGRE = source.LON_DEGRE,
