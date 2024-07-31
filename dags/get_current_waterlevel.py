@@ -71,6 +71,7 @@ dag = DAG(
     dag_id="water_level_collection", # DAG name
     schedule_interval='0 10,14,18 * * *',
     tags=['수위', 'Daily', '3 times', 'raw', 'mart'],
+    description="Get current each stream's water-level data",
     catchup=True,
     default_args=default_args,
     template_searchpath=[f"{Variable.get('INCLUDE_DIR')}"],
