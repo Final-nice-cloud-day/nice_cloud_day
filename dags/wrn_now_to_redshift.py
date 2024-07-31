@@ -148,7 +148,7 @@ dag = DAG(
     description='기상 데이터를 처리하고 enrich하는 DAG',
     schedule_interval='0 */4 * * *',
     catchup=False,
-    tags=['특보', 'raw_data', 'mart_data', 'Daily', '6time']
+    tags=['특보', 'raw', 'mart', 'Daily', '6time']
 )
 
 start_date = pendulum.datetime(2024, 7, 25, tz=kst)
