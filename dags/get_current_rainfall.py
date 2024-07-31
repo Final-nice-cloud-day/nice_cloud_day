@@ -68,7 +68,7 @@ dag = DAG(
     dag_id="stream_rainfall_collection", # DAG name
     schedule_interval='30 09,13,17 * * *',
     tags=['강수량', 'Daily', '3 times', 'raw', 'mart'],
-    description="Get current each stream's rainfall data",
+    description="하천별 강수량 데이터 수집(한강홍수통제소 API 기반)",
     catchup=True,
     default_args=default_args 
 )
