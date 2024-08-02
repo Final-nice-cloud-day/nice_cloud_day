@@ -1,3 +1,4 @@
+import os
 import requests
 import json
 import csv
@@ -15,10 +16,16 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 
 from plugins import s3
 
+# 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
+def get_absolute_path(relative_path):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(dir_path, relative_path)
+
 redshift_conn_id = "AWS_Redshift" # 'redshift_dev_db'
 s3_conn_id = "AWS_S3" # 'aws_conn_choi'
 s3_bucket = "team-okky-1-bucket" # 'yonggu-practice-bucket'
-data_dir = Variable.get("DATA_DIR")
+data_dir = get_absolute_path('../data')
+include_dir = get_absolute_path('../include')
 
 schema = 'raw_data' # 'yonggu_choi_14'
 tables_info = [
@@ -60,7 +67,7 @@ tables_info = [
 
 default_args = {
     'owner': 'yonggu',
-    'start_date': pendulum.datetime(2024, 7, 31, 17, tz='Asia/Seoul'),
+    'start_date': pendulum.datetime(2024, 8, 2, 15, tz='Asia/Seoul'),
     'email': ['yonggu.choi.14@gmail.com'],
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=3),
@@ -74,7 +81,7 @@ dag = DAG(
     description="하천별 수위 데이터 수집(한강홍수통제소 API 기반)",
     catchup=True,
     default_args=default_args,
-    template_searchpath=[f"{Variable.get('INCLUDE_DIR')}"],
+    template_searchpath=[f"{include_dir}"],
 )
 
 def copy_to_s3(**context):
@@ -111,7 +118,7 @@ def get_entire_stream_list(**context):
     
     logging.info(f"entire_list_count: {len(entire_list) - 1}")
 
-    with open("/opt/airflow/data/waterlevel/list.csv", "w") as file:
+    with open(f"{get_absolute_path('../data/waterlevel/list.csv')}", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
         writer.writerows(entire_list)
 
@@ -119,7 +126,7 @@ def get_entire_stream_list(**context):
     id_data = [i[0] for i in entire_list]
     id_data_reshape = [[x] for x in id_data]
 
-    with open("/opt/airflow/data/waterlevel/extracted_id_list.csv", "w") as file:
+    with open(f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}", "w") as file:
         writer = csv.writer(file, quoting = csv.QUOTE_NONE)
         writer.writerows(id_data_reshape)
 
@@ -187,7 +194,7 @@ def insert_history_time(record, now, today):
 
 def get_entire_stream_waterlevel_list(**kwargs):
     entire_list = [["obs_id", "obs_date", "water_level", "flow", "data_key", "created_at", "updated_at"]]
-    row = read_csv_file("/opt/airflow/data/waterlevel/extracted_id_list.csv")
+    row = read_csv_file(f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}")
 
     logging.info(f"row count>> {len(row)}")
 
@@ -236,7 +243,7 @@ def get_entire_stream_waterlevel_list(**kwargs):
             
             time.sleep(0.1)
 
-        with open(f"/opt/airflow/data/water_level_data_{date[2]}.csv", "w") as file:
+        with open(f"{get_absolute_path(f'../data/water_level_data_{date[2]}.csv')}", "w") as file:
             writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
             writer.writerows(entire_list)
         
@@ -249,7 +256,7 @@ def get_entire_stream_waterlevel_list(**kwargs):
 
 def get_associate_stream_list(**context):
     entire_list = [["obs_id", "river", "rel_river", "opened_at", "first_at", "last_at"]]
-    row = read_csv_file("/opt/airflow/data/waterlevel/extracted_id_list.csv")
+    row = read_csv_file(f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}")
 
     for id in row:
         url = f"""http://www.wamis.go.kr:8080/wamis/openapi/wkw/wl_obsinfo?obscd={id}&output=json"""
@@ -269,7 +276,7 @@ def get_associate_stream_list(**context):
     
     logging.info(f"entire_list_count: {len(entire_list) - 1}, missing_count: {missing_cnt}")
 
-    with open("/opt/airflow/data/waterlevel/associate_list.csv", "w") as file:
+    with open(f"{get_absolute_path('../data/waterlevel/associate_list.csv')}", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
         writer.writerows(entire_list)
 
