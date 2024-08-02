@@ -2,14 +2,16 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
+from io import StringIO
+from psycopg2.extras import execute_values
+from common.alert import SlackAlert
 import requests
 import csv
-from io import StringIO
 import pendulum
 import pandas as pd
-from psycopg2.extras import execute_values
 import logging
 
+slackbot = SlackAlert('#airflow_log') 
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
@@ -20,6 +22,8 @@ default_args = {
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=5),
+    'on_failure_callback': slackbot.failure_alert,
+    'on_success_callback': slackbot.success_alert,
 }
     
 def fct_afs_wl_to_s3(data_interval_end, **kwargs):
@@ -114,6 +118,7 @@ def fct_afs_wl_to_s3(data_interval_end, **kwargs):
                         replace=True
                     )
                     logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
+                    logging.info(f"{len(data)} 건 저장되었습니다.")
                     kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
                 except Exception as e:
                     logging.error(f"S3 업로드 실패: {e}")
