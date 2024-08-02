@@ -2,9 +2,11 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
 from airflow.hooks.postgres_hook import PostgresHook
+from common.alert import SlackAlert
 import pendulum
 import logging
 
+slackbot = SlackAlert('#airflow_log') 
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
@@ -15,11 +17,15 @@ default_args = {
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=5),
+    'on_failure_callback': slackbot.failure_alert,
+    'on_success_callback': slackbot.success_alert,
 }
 
-def mart_fct_afs_info():
+def mart_fct_afs_info(data_interval_end):
     logging.info("redshift 적재 시작")
     redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
+    #base_dt=data_interval_end.in_timezone(kst).strftime('%m%d')
+    base_date = (data_interval_end.in_timezone(kst) - pendulum.duration(hours=1)).strftime('%Y-%m-%d %H:%M:%S%z')
         
     conn = redshift_hook.get_conn()
     cursor = conn.cursor()
@@ -44,7 +50,7 @@ def mart_fct_afs_info():
     """)
     cursor.execute("TRUNCATE TABLE temp_fct_afs_info;")
         
-    insert_temp_query = """
+    insert_temp_query = f"""
     INSERT INTO temp_fct_afs_info (
     reg_name,
     tm_fc,
@@ -60,11 +66,6 @@ def mart_fct_afs_info():
     data_key,
     created_at,
     updated_at
-    )
-    WITH MAX_TM_FC AS (
-        SELECT reg_id, MAX(tm_fc) AS max_tm_fc
-        FROM raw_data.fct_afs_wc_info
-        GROUP BY reg_id
     )
     SELECT DISTINCT
         T3.reg_name,
@@ -111,13 +112,15 @@ def mart_fct_afs_info():
     ON LEFT(T2.reg_id, 3) = LEFT(T4.reg_id, 3)
     AND T2.tm_fc = T4.tm_st
     AND T2.tm_ef = T4.tm_ed
-    INNER JOIN 
-        MAX_TM_FC M ON T2.reg_id = M.reg_id AND T2.tm_fc = M.max_tm_fc
     WHERE 1=1
+    AND T2.tm_fc = '{base_date}'
     ORDER BY 
         T2.reg_id, T2.tm_fc, T2.tm_ef;
 """
     cursor.execute(insert_temp_query)
+    affected_rows = cursor.rowcount
+    logging.info(f"{base_date}")
+    logging.info(f"{affected_rows} rows 데이터를 읽었습니다.")
     
     merge_query = """
     MERGE INTO mart_data.fct_afs_info
@@ -149,13 +152,9 @@ def mart_fct_afs_info():
     try:
         cursor.execute(merge_query)
         affected_rows = cursor.rowcount
-        cursor.execute("TRUNCATE TABLE temp_kma_sfcdd3_stn_iist;")
+        cursor.execute("TRUNCATE TABLE temp_fct_afs_info;")
         conn.commit()
-        if affected_rows == 0:
-            logging.error("ERROR: 적재할 데이터가 없습니다.")
-            raise ValueError("ERROR: 적재할 데이터가 없습니다.")
-        else:
-            logging.info(f"성공적으로 적재된 행 수: {affected_rows}")
+        logging.info(f"성공적으로 적재된 행 수: {affected_rows}")
     except Exception as e:
         logging.error(f"Redshift 로드 실패: {e}")
         raise ValueError(f"Redshift 로드 실패: {e}")
