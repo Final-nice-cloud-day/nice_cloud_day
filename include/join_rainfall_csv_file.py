@@ -2,6 +2,11 @@ import os
 import csv
 import pandas as pd
 
+# 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
+def get_absolute_path(relative_path):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(dir_path, relative_path)
+
 # 위도와 경도 변환 함수
 def conversion(old):
     try:
