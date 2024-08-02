@@ -1,3 +1,4 @@
+import os
 import requests
 import json
 import csv
@@ -15,10 +16,16 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 
 from plugins import s3
 
+# 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
+def get_absolute_path(relative_path):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(dir_path, relative_path)
+
 redshift_conn_id = "AWS_Redshift" # 'redshift_dev_db'
 s3_conn_id = "AWS_S3" # 'aws_conn_choi'
 s3_bucket = "team-okky-1-bucket" # 'yonggu-practice-bucket'
-data_dir = Variable.get("DATA_DIR")
+data_dir = get_absolute_path('../data')
+include_dir = get_absolute_path('../include')
 
 schema = 'raw_data' # 'yonggu_choi_14'
 tables_info = [
@@ -57,7 +64,7 @@ tables_info = [
 
 default_args = {
     'owner': 'yonggu',
-    'start_date': pendulum.datetime(2024, 7, 31, 17, tz='Asia/Seoul'),
+    'start_date': pendulum.datetime(2024, 8, 2, 14, tz='Asia/Seoul'),
     'email': ['yonggu.choi.14@gmail.com'],
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=3),
@@ -68,6 +75,7 @@ dag = DAG(
     dag_id="stream_rainfall_collection", # DAG name
     schedule_interval='30 09,13,17 * * *',
     tags=['강수량', 'Daily', '3 times', 'raw', 'mart'],
+    description="하천별 강수량 데이터 수집(한강홍수통제소 API 기반)",
     catchup=True,
     default_args=default_args 
 )
@@ -105,7 +113,7 @@ def get_entire_rainfall_list(**context):
     
     print(f"entire_list_count: {len(entire_list) - 1}")
 
-    with open("/opt/airflow/data/rainfall/list.csv", "w") as file:
+    with open(f"{get_absolute_path('../data/rainfall/list.csv')}", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
         writer.writerows(entire_list)
 
@@ -113,7 +121,7 @@ def get_entire_rainfall_list(**context):
     id_data = [i[0] for i in entire_list]
     id_data_reshape = [[x] for x in id_data]
 
-    with open("/opt/airflow/data/rainfall/extracted_id_list.csv", "w") as file:
+    with open(f"{get_absolute_path('../data/rainfall/extracted_id_list.csv')}", "w") as file:
         writer = csv.writer(file, quoting = csv.QUOTE_NONE)
         writer.writerows(id_data_reshape)
 
@@ -180,7 +188,7 @@ def insert_history_time(record, now, today):
 
 def get_entire_stream_rainfall_list(**kwargs):
     entire_list = [["obs_id", "obs_date", "rainfall", "data_key", "created_at", "updated_at"]]
-    row = read_csv_file("/opt/airflow/data/rainfall/extracted_id_list.csv")
+    row = read_csv_file(f"{get_absolute_path('../data/rainfall/extracted_id_list.csv')}")
 
     logging.info(f"row count>> {len(row)}")
 
@@ -229,7 +237,7 @@ def get_entire_stream_rainfall_list(**kwargs):
             
             time.sleep(0.1)
 
-        with open(f"/opt/airflow/data/rainfall_data_{date[2]}.csv", "w") as file:
+        with open(f"{get_absolute_path(f'../data/rainfall_data_{date[2]}.csv')}", "w") as file:
             writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
             writer.writerows(entire_list)
         
@@ -242,7 +250,7 @@ def get_entire_stream_rainfall_list(**kwargs):
 
 def get_associate_rainfall_list(**context):
     entire_list = [["obs_id", "rel_river", "opened_at", "first_at", "last_at"]]
-    row = read_csv_file("/opt/airflow/data/rainfall/extracted_id_list.csv")
+    row = read_csv_file(f"{get_absolute_path('../data/rainfall/extracted_id_list.csv')}")
 
     for id in row:
         url = f"""http://www.wamis.go.kr:8080/wamis/openapi/wkw/rf_obsinfo?obscd={id}&output=json"""
@@ -263,7 +271,7 @@ def get_associate_rainfall_list(**context):
     
     logging.info(f"entire_list_count: {len(entire_list) - 1}, missing_count: {missing_cnt}")
 
-    with open("/opt/airflow/data/rainfall/associate_list.csv", "w") as file:
+    with open(f"{get_absolute_path('../data/rainfall/associate_list.csv')}", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
         writer.writerows(entire_list)
 
@@ -281,7 +289,7 @@ task2 = PythonOperator(
 
 task3 = BashOperator(
     task_id='join_rainfall_info_list',
-    bash_command='python /opt/airflow/include/join_rainfall_csv_file.py',
+    bash_command=f"python3 {get_absolute_path('../include/join_rainfall_csv_file.py')}",
     dag=dag
 )
 
@@ -357,7 +365,7 @@ task7_2 = S3ToRedshiftOperator(
 
 task8 = BashOperator(
     task_id='convert_rainfall_summary_table',
-    bash_command='python /opt/airflow/include/convert_rainfall_summary_table.py',
+    bash_command=f"python3 {get_absolute_path('../include/convert_rainfall_summary_table.py')}",
     dag=dag
 )
 

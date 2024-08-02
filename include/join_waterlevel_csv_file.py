@@ -1,5 +1,11 @@
+import os
 import csv
 import pandas as pd
+
+# 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
+def get_absolute_path(relative_path):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(dir_path, relative_path)
 
 # 위도와 경도 변환 함수
 def conversion(old):
@@ -16,8 +22,8 @@ def conversion(old):
         return None
 
 # 데이터 로드
-list_data = pd.read_csv("/opt/airflow/data/waterlevel/list.csv", header=0)
-associate_data = pd.read_csv("/opt/airflow/data/waterlevel/associate_list.csv", header=0)
+list_data = pd.read_csv(f"{get_absolute_path('../data/waterlevel/list.csv')}", header=0)
+associate_data = pd.read_csv(f"{get_absolute_path('../data/waterlevel/associate_list.csv')}", header=0)
 
 # 각 셀의 양쪽 공백 제거
 list_data = list_data.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
@@ -49,14 +55,14 @@ merged_data['lat'] = merged_data['lat'].apply(conversion)
 merged_data['lon'] = merged_data['lon'].apply(conversion)
 
 # 결과 저장
-output_file_path = '/opt/airflow/data/info/water_level_info.csv'
+output_file_path = f"{get_absolute_path('../data/info/water_level_info.csv')}"
 merged_data.to_csv(output_file_path, index=False, quoting=csv.QUOTE_ALL)
 
 # 'obs_id' 열 추출
 obs_id_column = merged_data[['obs_id']]
 
 # 결과 저장 (유효한 obs_id로 업데이트)
-output_file_path = '/opt/airflow/data/waterlevel/extracted_id_list.csv'
+output_file_path = f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}"
 obs_id_column.to_csv(output_file_path, index=False)
 
 print(f"{merged_data.shape}, {obs_id_column.shape}")
