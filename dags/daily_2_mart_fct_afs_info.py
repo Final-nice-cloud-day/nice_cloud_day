@@ -166,7 +166,7 @@ def mart_fct_afs_info():
 with DAG(
     'mart_fct_afs_info_insert',
     default_args=default_args,
-    description='mart_fct_afs_info insert',
+    description='마트테이블 중기예보 정보 적재',
     schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),

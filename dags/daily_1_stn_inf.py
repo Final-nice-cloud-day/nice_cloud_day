@@ -226,9 +226,9 @@ def stn_inf_to_redshift(data_interval_end, **kwargs):
     
     
 with DAG(
-    'stn_inf_to_s3_and_redshif',
+    'stn_inf_to_s3_and_redshift',
     default_args=default_args,
-    description='stn_inf upload to S3',
+    description='지상관측정보 S3 & redshift 적재',
     schedule_interval='0 7 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),

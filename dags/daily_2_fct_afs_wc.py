@@ -182,7 +182,7 @@ def fct_afs_wc_to_redshift(data_interval_end, **kwargs):
 with DAG(
     'fct_afs_wc_to_s3_and_redshift',
     default_args=default_args,
-    description='fct_afs_wc upload to S3 and Redshift',
+    description='중기기온예보 S3 & redshift 적재',
     schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),

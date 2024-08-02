@@ -178,7 +178,7 @@ def fct_afs_wl_to_redshift(data_interval_end, **kwargs):
     
 
 with DAG(
-    'fct_afs_wl_to_s3_and_redshift',
+    '중기기온예보 s3 & redshift 적재',
     default_args=default_args,
     description='fct_afs_wl upload to S3 and Redshift',
     schedule_interval='0 7,19 * * *',

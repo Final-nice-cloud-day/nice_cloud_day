@@ -144,7 +144,7 @@ def mart_comr_api_iist():
 with DAG(
     'mart_comr_api_iist',
     default_args=default_args,
-    description='mart_comr_api_iist insert',
+    description='마트테이블 기상예보 비교 적재',
     schedule_interval='0 7 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),

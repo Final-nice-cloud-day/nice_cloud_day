@@ -136,7 +136,7 @@ def mart_kma_sfcdd3_stn_iist():
 with DAG(
     'mart_kma_sfcdd3_stn_list_insert',
     default_args=default_args,
-    description='mart_kma_sfcdd3_stn insert',
+    description='마트테이블 종관기상관측 적재',
     schedule_interval='0 7 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),

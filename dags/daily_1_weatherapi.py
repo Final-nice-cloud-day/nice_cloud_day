@@ -134,7 +134,7 @@ def weatherAPI_to_redshift(data_interval_end, **kwargs):
 with DAG(
     'weatherAPI_to_s3_redshift_task',
     default_args=default_args,
-    description='weatherAPI upload to S3 and Redshift',
+    description='weatherAPI S3 & redshift 적재',
     schedule_interval='0 7 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),

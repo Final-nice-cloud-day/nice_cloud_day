@@ -193,7 +193,7 @@ def fct_medm_reg_to_redshift(data_interval_end, **kwargs):
 with DAG(
     'fct_medm_reg_to_s3_and_redshift',
     default_args=default_args,
-    description='fct_medm_reg upload to S3 and redshift',
+    description='중기 예보 구역 S3 & redshift 적재',
     schedule_interval='0 7 * * *',
     catchup=True,
     tags=['중기', 'Daily', '1 time', 'raw'],
