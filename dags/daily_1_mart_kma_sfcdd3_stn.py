@@ -2,32 +2,24 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
 from airflow.hooks.postgres_hook import PostgresHook
-from common.alert import SlackAlert
 import pendulum
 import logging
 
-
-slackbot = SlackAlert('#airflow_log') 
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
     'owner': 'chansu',
     'depends_on_past': True,  # 선행작업의존여부
-    'start_date': pendulum.datetime(2024, 8, 2, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=5),
-    'on_failure_callback': slackbot.failure_alert,
-    'on_success_callback': slackbot.success_alert,
 }
 
-def mart_kma_sfcdd3_stn_iist(data_interval_end):
+def mart_kma_sfcdd3_stn_iist():
     logging.info("redshift 적재 시작")
     redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
-    
-    base_dt=data_interval_end.in_timezone(kst).strftime('%m%d')
-    #base_date = data_interval_end.in_timezone(kst).strftime('%Y%m%d')
         
     conn = redshift_hook.get_conn()
     cursor = conn.cursor()
@@ -51,7 +43,7 @@ def mart_kma_sfcdd3_stn_iist(data_interval_end):
     """)
     cursor.execute("TRUNCATE TABLE temp_kma_sfcdd3_stn_iist;")
         
-    insert_temp_query = f"""
+    insert_temp_query = """
     INSERT INTO temp_kma_sfcdd3_stn_iist (
     stn_ko,
     tm_id,
@@ -92,14 +84,12 @@ def mart_kma_sfcdd3_stn_iist(data_interval_end):
     from   raw_data.kma_sfcdd3_list T1
     left join raw_data.stn_inf_info T2
     on T1.stn_id = T2.stn_id
-    where SUBSTRING(T1.tm_id, 5, 4) = '{base_dt}'
+    where SUBSTRING(T1.tm_id, 5, 4) = TO_CHAR(SYSDATE, 'MMDD')
     AND T1.ta_avg <> -99
     AND T1.ta_min <> -99
     AND T1.ta_max <> -99;
     """
     cursor.execute(insert_temp_query)
-    affected_rows = cursor.rowcount
-    logging.info(f"{affected_rows} rows 데이터를 읽었습니다.")
     
     merge_query = """
     MERGE INTO mart_data.kma_sfcdd3_stn_iist

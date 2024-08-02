@@ -2,32 +2,25 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
 from airflow.hooks.postgres_hook import PostgresHook
-from common.alert import SlackAlert
 import pendulum
 import logging
 
-
-slackbot = SlackAlert('#airflow_log') 
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
     'owner': 'chansu',
     'depends_on_past': True,  # 선행작업의존여부N
-    'start_date': pendulum.datetime(2024, 8, 1, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=5),
-    'on_failure_callback': slackbot.failure_alert,
-    'on_success_callback': slackbot.success_alert,
 }
 
-def mart_comr_api_iist(data_interval_end):
+def mart_comr_api_iist():
     logging.info("redshift 적재 시작")
     redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
-    #base_dt=data_interval_end.in_timezone(kst).strftime('%m%d')
-    base_date = data_interval_end.in_timezone(kst).strftime('%Y%m%d')
-    
+        
     conn = redshift_hook.get_conn()
     cursor = conn.cursor()
     
@@ -46,8 +39,8 @@ def mart_comr_api_iist(data_interval_end):
     );
     """)
     cursor.execute("TRUNCATE TABLE temp_comr_api_list;")
-    
-    insert_temp_query = f"""
+        
+    insert_temp_query = """
     INSERT INTO temp_comr_api_list (
         DIV_NM,
         reg_name,
@@ -92,7 +85,7 @@ def mart_comr_api_iist(data_interval_end):
     AND T2.tm_fc = T4.tm_st
     AND T2.tm_ef = T4.tm_ed
     where 1=1
-    AND T2.tm_fc = '{base_date}' || '06'
+    AND T2.tm_fc = CURRENT_DATE + INTERVAL '6 hours'
     and T2.reg_id ='11B10101'
     union ALL
     select 'WeatherAPI' as DIV_NM,
@@ -106,14 +99,12 @@ def mart_comr_api_iist(data_interval_end):
         created_at,
         updated_at
     from raw_data.WeatherAPI_LIST
-    WHERE 1=1
-    AND data_key = '{base_date}' || '07'
-    AND date BETWEEN TO_CHAR('{base_date}'::date + INTERVAL '2 day', 'YYYYMMDD') 
-        AND TO_CHAR('{base_date}'::date + INTERVAL '10 day', 'YYYYMMDD');
+    where data_key = CURRENT_DATE + INTERVAL '7 hours'
+    AND date BETWEEN TO_CHAR(CURRENT_DATE + INTERVAL '2 day' , 'YYYYMMDD') 
+        AND TO_CHAR(CURRENT_DATE + INTERVAL '10 day', 'YYYYMMDD')
+        ;
     """
     cursor.execute(insert_temp_query)
-    affected_rows = cursor.rowcount
-    logging.info(f"{affected_rows} rows 데이터를 읽었습니다.")
     
     merge_query = """
     MERGE INTO mart_data.comr_api_list
@@ -151,7 +142,7 @@ def mart_comr_api_iist(data_interval_end):
         conn.close()
     
 with DAG(
-    'mart_comr_api_iist_1',
+    'mart_comr_api_iist',
     default_args=default_args,
     description='마트테이블 기상예보 비교 적재',
     schedule_interval='0 7 * * *',
