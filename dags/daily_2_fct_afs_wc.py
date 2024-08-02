@@ -2,24 +2,27 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 from airflow.hooks.postgres_hook import PostgresHook
+from io import StringIO
+from psycopg2.extras import execute_values
+from common.alert import SlackAlert
 import requests
 import csv
-from io import StringIO
 import pendulum
-import pandas as pd
-from psycopg2.extras import execute_values
 import logging
 
+slackbot = SlackAlert('#airflow_log')
 kst = pendulum.timezone("Asia/Seoul")
 
 default_args = {
     'owner': 'chansu',
     'depends_on_past': True,  # 선행작업의존여부
-    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
+    'start_date': pendulum.datetime(2024, 8, 2, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=5),
+    'on_failure_callback': slackbot.failure_alert,
+    'on_success_callback': slackbot.success_alert,
 }
 
 def fct_afs_wc_to_s3(data_interval_end, **kwargs):
@@ -117,6 +120,7 @@ def fct_afs_wc_to_s3(data_interval_end, **kwargs):
                         replace=True
                     )
                     logging.info(f"저장성공 첫 번째 데이터 행: {data[0]}")
+                    logging.info(f"{len(data)} 건 저장되었습니다.")
                     kwargs['task_instance'].xcom_push(key='s3_key', value=s3_key)
                 except Exception as e:
                     logging.error(f"S3 업로드 실패: {e}")
@@ -171,7 +175,9 @@ def fct_afs_wc_to_redshift(data_interval_end, **kwargs):
         
         try:
             execute_values(cursor, insert_query, data)
+            affected_rows = cursor.rowcount
             conn.commit()
+            logging.info(f"성공적으로 적재된 행 수: {affected_rows}")
             logging.info(f"Redshift 적재 완료: {s3_path}")
         except Exception as e:
             raise ValueError(f"Redshift 로드 실패: {e}")
@@ -182,7 +188,7 @@ def fct_afs_wc_to_redshift(data_interval_end, **kwargs):
 with DAG(
     'fct_afs_wc_to_s3_and_redshift',
     default_args=default_args,
-    description='fct_afs_wc upload to S3 and Redshift',
+    description='중기기온예보 S3 & redshift 적재',
     schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),
