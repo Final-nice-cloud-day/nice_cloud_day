@@ -21,7 +21,7 @@ default_args = {
 dag = DAG(
     'fct_shrt_reg_to_s3_redshift',
     default_args=default_args,
-    description='단기예보구역 fct_shrt_reg_to_s3 // S3 to Redshift',
+    description='단기 예보 구역 s3 & Redshift 적재',
     schedule_interval='0 6,12,18 * * *',
     catchup=True,
     tags=['단기', 'Daliy', '3time', 'raw_data']
