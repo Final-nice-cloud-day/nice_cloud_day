@@ -46,7 +46,7 @@ default_args = {
 dag = DAG(
     'Update_DISCNT_DUST',
     default_args=default_args,
-    description='Update 2024 DUST DIS_CNT data in Redshift',
+    description='황사 관측일수',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 0 * * *',
     tags=['크롤', 'Daily', '1 time', 'mart'],

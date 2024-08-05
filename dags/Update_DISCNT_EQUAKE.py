@@ -108,7 +108,7 @@ default_args = {
 dag = DAG(
     'Update_DISCNT_EQUAKE',
     default_args=default_args,
-    description='Update 2024 EQUAKE DIS_CNT data in Redshift',
+    description='지진발생 위치/횟수',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 0 * * *',
     tags=['기상청', 'Daily', '1 time', 'mart'],
