@@ -34,9 +34,9 @@ jobs:
 
     - name: Upload DAG files to S3
       run: |
-        aws s3 sync dags/ s3://team-okky-1-bucket/dags/ --delete --recursive
-        aws s3 sync data/ s3://team-okky-1-bucket/data/ --delete --recursive
-        aws s3 sync include/ s3://team-okky-1-bucket/include/ --delete --recursive
+        aws s3 sync dags/ s3://team-okky-1-bucket/dags/ --delete
+        aws s3 sync data/ s3://team-okky-1-bucket/data/ --delete
+        aws s3 sync include/ s3://team-okky-1-bucket/include/ --delete
 
     - name: Deploy DAGs to EC2
       run: |
