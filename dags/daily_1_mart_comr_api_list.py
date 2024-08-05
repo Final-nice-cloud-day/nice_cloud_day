@@ -92,7 +92,7 @@ def mart_comr_api_iist(data_interval_end):
     AND T2.tm_fc = T4.tm_st
     AND T2.tm_ef = T4.tm_ed
     where 1=1
-    AND T2.tm_fc = '{base_date}' || '06'
+    AND T2.tm_fc = TO_TIMESTAMP('{base_date}' || '06', 'YYYYMMDDHH24')
     and T2.reg_id ='11B10101'
     union ALL
     select 'WeatherAPI' as DIV_NM,
@@ -107,7 +107,7 @@ def mart_comr_api_iist(data_interval_end):
         updated_at
     from raw_data.WeatherAPI_LIST
     WHERE 1=1
-    AND data_key = '{base_date}' || '07'
+    AND data_key = TO_TIMESTAMP('{base_date}' || '07', 'YYYYMMDDHH24')
     AND date BETWEEN TO_CHAR('{base_date}'::date + INTERVAL '2 day', 'YYYYMMDD') 
         AND TO_CHAR('{base_date}'::date + INTERVAL '10 day', 'YYYYMMDD');
     """

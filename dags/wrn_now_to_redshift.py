@@ -10,7 +10,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'doyoung',
     'depends_on_past': False,
-    'start_date': pendulum.datetime(2024, 7, 25, 7, 0, 0, tz=kst),
+    'start_date': pendulum.datetime(2024, 7, 30, 7, 0, 0, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -148,10 +148,10 @@ dag = DAG(
     description='기상 데이터를 처리하고 enrich하는 DAG',
     schedule_interval='0 */4 * * *',
     catchup=False,
-    tags=['특보', 'raw_data', 'mart_data', 'Daily', '6time']
+    tags=['특보', 'raw', 'mart', 'Daily', '6time']
 )
 
-start_date = pendulum.datetime(2024, 7, 25, tz=kst)
+start_date = pendulum.datetime(2024, 7, 30, tz=kst)
 
 # PythonOperator에서 redshift_hook을 전달하는 방식 수정
 task1 = PythonOperator(
