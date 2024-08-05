@@ -17,7 +17,7 @@ kst = pendulum.timezone("Asia/Seoul")
 default_args = {
     'owner': 'chansu',
     'depends_on_past': True,
-    'start_date': pendulum.datetime(2024, 7, 29, tz=kst),
+    'start_date': pendulum.datetime(2024, 8, 4, tz=kst),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -183,9 +183,9 @@ def fct_afs_wl_to_redshift(data_interval_end, **kwargs):
     
 
 with DAG(
-    '중기기온예보 s3 & redshift 적재',
+    'fct_afs_wc_to_s3_and_redshift_1',
     default_args=default_args,
-    description='fct_afs_wl upload to S3 and Redshift',
+    description='중기기온예보 s3 & redshift 적재',
     schedule_interval='0 7,19 * * *',
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),
