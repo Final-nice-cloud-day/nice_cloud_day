@@ -105,15 +105,15 @@ def mart_fcst_shrt_close_time():
             t1.wf_pre_cd, 
             t1.wf_info,
             t3.iso_3166_code, 
-            t2.data_key,
-            t2.created_at,
-            t2.updated_at
+            t1.data_key,
+            t1.created_at,
+            t1.updated_at
         FROM raw_data.fct_afs_dl_info t1
         INNER JOIN raw_data.fct_shrt_reg_list t2
-        ON t1.reg_id = t2.reg_id
-        AND t1.data_key = t2.data_key
+            ON t1.reg_id = t2.reg_id
+            AND t1.data_key = t2.data_key
         LEFT JOIN mart_data.korea_region_codes t3
-        ON t2.reg_name = t3.reg_name
+            ON t2.reg_name = t3.reg_name
         WHERE t1.ta <> -99;
         """
         cursor.execute(insert_temp_table)
@@ -130,10 +130,10 @@ def mart_fcst_shrt_close_time():
         merge_query = """
         MERGE INTO mart_data.tt_fcst_shrt_mart
         USING temp_fcst_shrt_mart AS source
-        ON mart_data.tt_fcst_shrt_mart.reg_name = source.reg_name 
-        AND mart_data.tt_fcst_shrt_mart.tm_fc = source.tm_fc 
-        AND mart_data.tt_fcst_shrt_mart.tm_ef = source.tm_ef
-        and mart_data.tt_fcst_shrt_mart.data_key = source.data_key
+            ON mart_data.tt_fcst_shrt_mart.reg_id = source.reg_id 
+            AND mart_data.tt_fcst_shrt_mart.tm_fc = source.tm_fc 
+            AND mart_data.tt_fcst_shrt_mart.tm_ef = source.tm_ef
+            and mart_data.tt_fcst_shrt_mart.data_key = source.data_key
         WHEN MATCHED THEN
         UPDATE SET
             reg_id = source.reg_id,
@@ -168,7 +168,6 @@ def mart_fcst_shrt_close_time():
     finally:
         cursor.close()
         conn.close()
-        conn.commit()
         logging.info("모든 작업이 성공적으로 완료되었습니다.")
 
 # 외부 DAG 센서 설정
