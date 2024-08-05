@@ -15,6 +15,7 @@ from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 from plugins import s3
+from common.alert import SlackAlert
 
 # 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
 def get_absolute_path(relative_path):
@@ -26,6 +27,7 @@ s3_conn_id = "AWS_S3" # 'aws_conn_choi'
 s3_bucket = "team-okky-1-bucket" # 'yonggu-practice-bucket'
 data_dir = get_absolute_path('../data')
 include_dir = get_absolute_path('../include')
+slackbot = SlackAlert('#airflow_log')
 
 schema = 'raw_data' # 'yonggu_choi_14'
 tables_info = [
@@ -72,6 +74,8 @@ default_args = {
     'retries': 1,
     'retry_delay': pendulum.duration(minutes=3),
     'max_active_runs': 1,
+    'on_failure_callback': slackbot.failure_alert,
+    'on_success_callback': slackbot.success_alert,
 }
 
 dag = DAG(
