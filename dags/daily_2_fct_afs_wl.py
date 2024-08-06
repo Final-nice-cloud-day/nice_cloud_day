@@ -87,7 +87,7 @@ def fct_afs_wl_to_s3(data_interval_end, **kwargs):
                         c = columns[5]
                         sky = columns[6]
                         pre = columns[7]
-                        if columns[8] == '없음':
+                        if '없음' in columns[8]:
                             conf_parts = columns[8].split(' ')
                             conf = conf_parts[0]
                             wf = conf_parts[1]
