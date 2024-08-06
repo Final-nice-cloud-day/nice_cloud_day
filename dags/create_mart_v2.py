@@ -128,12 +128,12 @@ def mart_fcst_shrt_close_time():
         logging.info("경기도 광주 ISO-3166 코드 매핑 제거 완료")
         
         merge_query = """
-        MERGE INTO mart_data.tt_fcst_shrt_mart
+        MERGE INTO mart_data.fcst_shrt_mart_st
         USING temp_fcst_shrt_mart AS source
-            ON mart_data.tt_fcst_shrt_mart.reg_id = source.reg_id 
-            AND mart_data.tt_fcst_shrt_mart.tm_fc = source.tm_fc 
-            AND mart_data.tt_fcst_shrt_mart.tm_ef = source.tm_ef
-            and mart_data.tt_fcst_shrt_mart.data_key = source.data_key
+            ON mart_data.fcst_shrt_mart_st.reg_id = source.reg_id 
+            AND mart_data.fcst_shrt_mart_st.tm_fc = source.tm_fc 
+            AND mart_data.fcst_shrt_mart_st.tm_ef = source.tm_ef
+            and mart_data.fcst_shrt_mart_st.data_key = source.data_key
         WHEN MATCHED THEN
         UPDATE SET
             reg_id = source.reg_id,
@@ -170,7 +170,6 @@ def mart_fcst_shrt_close_time():
         conn.close()
         logging.info("모든 작업이 성공적으로 완료되었습니다.")
 
-# 외부 DAG 센서 설정
 wait_for_fct_shrt_reg_to_s3_redshift = ExternalTaskSensor(
     task_id='wait_for_fct_shrt_reg_to_s3_redshift',
     external_dag_id='fct_shrt_reg_to_s3_redshift',
@@ -187,12 +186,10 @@ wait_for_fct_afs_dl_to_s3_redshift = ExternalTaskSensor(
     dag=dag,
 )
 
-# PythonOperator 설정
 execute_sql_task = PythonOperator(
     task_id='execute_sql',
     python_callable=mart_fcst_shrt_close_time,
     dag=dag,
 )
 
-# DAG 의존성 설정
 [wait_for_fct_shrt_reg_to_s3_redshift, wait_for_fct_afs_dl_to_s3_redshift] >> execute_sql_task
