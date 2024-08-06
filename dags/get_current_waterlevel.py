@@ -120,7 +120,7 @@ def get_entire_stream_list(**context):
         entire_list.append([elements["wlobscd"].strip(), elements["obsnm"].strip(), elements["lat"].strip(), elements["lon"].strip(), elements["agcnm"].strip(), 
                             elements["attwl"].strip(), elements["wrnwl"].strip(), elements["almwl"].strip()])
     
-    logging.info(f"entire_list_count: {len(entire_list) - 1}")
+    logging.info(f"{len(entire_list) - 1} rows 데이터를 읽었습니다.")
 
     with open(f"{get_absolute_path('../data/waterlevel/list.csv')}", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
@@ -200,7 +200,7 @@ def get_entire_stream_waterlevel_list(**kwargs):
     entire_list = [["obs_id", "obs_date", "water_level", "flow", "data_key", "created_at", "updated_at"]]
     row = read_csv_file(f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}")
 
-    logging.info(f"row count>> {len(row)}")
+    logging.info(f"{len(row)} rows 데이터를 읽었습니다.")
 
     dag_date = kwargs["data_interval_end"]
     now = dag_date.in_timezone('Asia/Seoul')
@@ -251,7 +251,7 @@ def get_entire_stream_waterlevel_list(**kwargs):
             writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
             writer.writerows(entire_list)
         
-        logging.info(f"{date} year - {len(entire_list) - 1} loading complete.")
+        logging.info(f"{date} year - {len(entire_list) - 1} 건 저장되었습니다.")
 
         # list 초기화
         entire_list = entire_list[:1]
@@ -278,7 +278,8 @@ def get_associate_stream_list(**context):
         entire_list.append([str(elements["wlobscd"]).strip(), str("NULL" if elements.get("rivnm") is None else elements.get("rivnm")).strip(), str(elements["bbsncd"]).strip(), 
                             str(elements["obsopndt"]).strip(), str("NULL" if elements.get("sistartobsdh") is None else elements.get("sistartobsdh") + ":00:00").strip(), str("NULL" if elements.get("siendobsdh") is None else elements.get("siendobsdh") + ":00:00").strip()])
     
-    logging.info(f"entire_list_count: {len(entire_list) - 1}, missing_count: {missing_cnt}")
+        logging.info(f"{len(entire_list) - 1} rows 데이터를 읽었습니다.")
+        logging.debug(f"missing_count: {missing_cnt}")
 
     with open(f"{get_absolute_path('../data/waterlevel/associate_list.csv')}", "w") as file:
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
