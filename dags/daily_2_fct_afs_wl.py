@@ -91,7 +91,7 @@ def fct_afs_wl_to_s3(data_interval_end, **kwargs):
                             conf_parts = columns[8].split(' ')
                             conf = conf_parts[0]
                             wf = conf_parts[1]
-                            rn_st = columns[10]
+                            rn_st = columns[9]
                         else:
                             conf = columns[8]
                             wf = columns[9]  
