@@ -169,7 +169,7 @@ with DAG(
     
     wait_for_stn_inf_task = ExternalTaskSensor(
         task_id='wait_for_stn_inf_task',
-        external_dag_id='stn_inf_to_s3_and_redshif',
+        external_dag_id='stn_inf_to_s3_and_redshift',
         external_task_id='stn_inf_to_redshift',
         allowed_states=['success'],
         failed_states=['failed', 'skipped'],
