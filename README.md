@@ -16,6 +16,13 @@
 - Airflow dag 성공 여부 log → Slack 알림 구현
 
 ## 프로젝트 파이프라인
+<details>
+  
+  <summary> 아키텍쳐 </summary>
+  
+  ![스크린샷 2024-08-06 13 48 13](https://github.com/user-attachments/assets/b2d2ce75-ec2f-448f-9daf-505e4eb8d8e2)
+
+</details>
 
 - Airflow를 통해 API에서 제공하는 데이터를 S3와 Redshift에 저장
 - 저장된 데이터를 바탕으로 마트테이블 생성 및 대시보드 연결
