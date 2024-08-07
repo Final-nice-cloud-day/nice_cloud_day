@@ -299,7 +299,7 @@ task2 = PythonOperator(
 
 task3 = BashOperator(
     task_id='join_stream_info_list',
-    bash_command='python /opt/airflow/include/join_waterlevel_csv_file.py',
+    bash_command=f"python3 {get_absolute_path('../include/join_waterlevel_csv_file.py')}",
     dag=dag
 )
 
