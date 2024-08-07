@@ -66,8 +66,11 @@
 
 # 프로젝트 결과
 ## Superset
-### Tab1. 날씨
+<detail>
+<summary> ### Tab1. 날씨 </summary>
 ![proj-dashboard-2024-08-06T05-13-12 404Z](https://github.com/user-attachments/assets/3a475e13-8eb5-405a-ab13-dc7fc6bf7e58)
-### Tab2. 자연재해
+</detail>
+<detail>
+<summary> ### Tab2. 자연재해 </summary>
 ![proj-dashboard-2024-08-06T08-22-10 762Z](https://github.com/user-attachments/assets/f013a6da-6c48-4721-b656-f79d6564e649)
-
+</detail>
