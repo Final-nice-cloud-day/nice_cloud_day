@@ -18,4 +18,4 @@
   - 수위 관측소 제원 조회
   -
   - 
-- 국가 수자원 관리 종합 시스템 :[수위 관측소](http://www.wamis.go.kr:8080/wamis/openapi/wkw/wl_obsinfo)
+- 국가 수자원 관리 종합 시스템 :[수위 관측소](http://www.wamis.go.kr:8080/wamisweb/wl/w7.do)
