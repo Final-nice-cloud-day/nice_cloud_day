@@ -14,4 +14,8 @@
   - 기상 특보
   - 태풍 정보
   - 지진 정보
-- 한강 홍수 통제소 OpenAPI : [한강호수](https://www.hrfco.go.kr/web/openapipage/reference.do)
+- 한강 홍수 통제소 OpenAPI : [한강호수](https://www.hrfco.go.kr/web/openapiPage/reference.do)
+  - 수위 관측소 제원 조회
+  -
+  - 
+- 국가 수자원 관리 종합 시스템 :[수위 관측소](http://www.wamis.go.kr:8080/wamis/openapi/wkw/wl_obsinfo)
