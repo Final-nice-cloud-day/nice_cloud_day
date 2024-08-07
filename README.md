@@ -21,8 +21,6 @@
 - 저장된 데이터를 바탕으로 마트테이블 생성 및 대시보드 연결
 - AWS Lambda를 이용한 실시간 데이터 처리 및 슬랙 알림 설정
 
-## ERD
-
 
 ## 활용 기술 및 프레임워크
 
@@ -62,3 +60,11 @@
 | 손봉호 | 단기 예보, 긴급 재난 문자 알림, Airflow 모니터링 시도 |
 | 전찬수 | 중기 예보, API 별 날씨 비교 , CI/CD git action , airflow log → sns 알림 |
 | 최용구 | 자연 재해 - 홍수 예보, 하천, 강수량 / AWS Infra 구축 보조 / Airflow 서버 분산 시도 |
+
+
+---
+
+# 프로젝트 결과
+## Superset
+### Tab1. 날씨
+<https://31-ur26205.slack.com/files/U07AFRE2LUU/F07FXDND7B6/proj-dashboard-2024-08-06t05-13-12.404z.jpg>
