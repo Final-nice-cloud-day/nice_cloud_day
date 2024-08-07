@@ -30,7 +30,7 @@
 
 <details>
   
-  <summary>데이터 흐름</summary>
+  <summary> Data flow </summary>
   
   ![prj_1-데이터흐름도](https://github.com/user-attachments/assets/1a338a65-495d-4f5c-87dd-f258718ccead)
 
@@ -46,6 +46,8 @@
 | 데이터 처리 | Python - requests, beautifulsoup4, pandas, AWS Athena |
 | CI / CD | Git, GitHub Actions |
 | 협업 툴 | AWS, GitHub, Slack, Notion, Gather |
+
+---
 
 # 프로젝트 세부 사항
 
@@ -67,8 +69,7 @@
 - [산림청](https://www.forest.go.kr/kfsweb/kfi/kfs/frfr/selectFrfrStatsNow.do?mn=NKFS_06_09_01)
 - [기상청_황사](https://www.weather.go.kr/w/dust/dust-obs-days.do)
 
-  
----
+
 
 ## 프로젝트 작업 및 타임라인
 
@@ -81,10 +82,10 @@
 | 4주차  | 최종 작업 마무리 & 보고서 및 발표 준비                             | 2024년 8월 5일 → 2024년 8월 9일 |
 | 5주차  | 자율 프로젝트 마무리                             | 2024년 8월 12일 → 2024년 8월 16일 |
 
+---
 
 # 팀원 및 역할
 
----
 
 | 팀원 | 역할 |
 | --- | --- |
@@ -114,3 +115,11 @@
 ![proj-dashboard-2024-08-06T08-22-10 762Z](https://github.com/user-attachments/assets/f013a6da-6c48-4721-b656-f79d6564e649)
 
 </details>
+
+## Tableau
+<details>
+</details>
+
+---
+
+# 개선점
