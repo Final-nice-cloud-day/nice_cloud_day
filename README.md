@@ -28,6 +28,13 @@
 - 저장된 데이터를 바탕으로 마트테이블 생성 및 대시보드 연결
 - AWS Lambda를 이용한 실시간 데이터 처리 및 슬랙 알림 설정
 
+<details>
+  
+  <summary>데이터 흐름</summary>
+  
+  ![prj_1-데이터흐름도](https://github.com/user-attachments/assets/1a338a65-495d-4f5c-87dd-f258718ccead)
+
+</details>
 
 ## 활용 기술 및 프레임워크
 
