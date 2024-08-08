@@ -158,7 +158,7 @@ default_args = {
 dag = DAG(
     'Update_DISCNT_SPI',
     default_args=default_args,
-    description='Weekly update of SPI data',
+    description='지난주 SPI지수 및 홍수/가뭄 관측일',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
     schedule_interval='0 0 * * 4',  # 매주 목요일 00시에 실행
     tags=['기상청', 'Weekly', '1 time', 'mart'],
