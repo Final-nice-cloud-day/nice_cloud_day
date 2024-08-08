@@ -75,25 +75,6 @@ def enrich_and_upload_data(**kwargs):
 
     now = pendulum.now('Asia/Seoul').format('YYYY-MM-DD HH:mm:ss')
 
-    cur.execute("DROP TABLE mart_data.sanbul_jisu")
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS mart_data.sanbul_jisu (
-            sigucode VARCHAR(16),
-            analdate TIMESTAMP,
-            doname VARCHAR(32),
-            upplocalcd VARCHAR(16),
-            sigun VARCHAR(32),
-            maxi INT,
-            meanavg INT,
-            mini INT,
-            iso_3166_code VARCHAR(16),
-            data_key TIMESTAMP,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP
-        );
-    """)
-
     for index, row in sanbul_df.iterrows():
         cur.execute("""
             INSERT INTO mart_data.sanbul_jisu (sigucode, analdate, doname, upplocalcd, sigun, maxi, meanavg, mini, iso_3166_code, data_key, created_at, updated_at)
@@ -113,9 +94,9 @@ default_args = {
 dag = DAG(
     'Update_Sanbul_Jisu',
     default_args=default_args,
-    description='Fetch and update Sanbul Jisu data every 3 hours',
+    description='3시간간격 산불지수',
     start_date=pendulum.datetime(2024, 7, 25, tz='Asia/Seoul'),
-    schedule_interval='0 */3 * * *',  # 매 3시간마다 실행
+    schedule_interval='5 0-23/3 * * *',  # 매 3시간 + 5분 마다 실행 
     tags=['공공', 'Daily', '8 time', 'mart'],
     catchup=False
 )
