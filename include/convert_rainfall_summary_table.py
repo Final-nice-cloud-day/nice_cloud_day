@@ -1,30 +1,28 @@
-import os
 import logging
-
-from airflow.models import Variable
-from airflow.providers.postgres.hooks.postgres import PostgresHook
+import os
 
 import gspread
+import pandas as pd
+from airflow.models import Variable
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from oauth2client.service_account import ServiceAccountCredentials
 
-import pandas as pd
-from sqlalchemy import create_engine
 
-def write_variable_to_local_file(variable_name, local_file_path):
+def write_variable_to_local_file(variable_name: str, local_file_path: str) -> None:
     content = Variable.get(variable_name)
     f = open(local_file_path, "w")
     f.write(content)
     f.close()
 
 # 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
-def get_absolute_path(relative_path):
+def get_absolute_path(relative_path: str) -> str:
     dir_path = os.path.dirname(os.path.realpath(__file__))
     return os.path.join(dir_path, relative_path)
 
 # Google Sheets API 설정
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-gs_json_file_path = get_absolute_path('./de3-practice-lakestar77-credentials.json')
-write_variable_to_local_file('gsheet_access_token', gs_json_file_path)
+gs_json_file_path = get_absolute_path("./de3-practice-lakestar77-credentials.json")
+write_variable_to_local_file("gsheet_access_token", gs_json_file_path)
 
 creds = ServiceAccountCredentials.from_json_keyfile_name(gs_json_file_path, scope)
 client = gspread.authorize(creds)
@@ -35,15 +33,15 @@ sheet = spreadsheet.worksheet("localname_list")
 data = sheet.get_all_records()
 
 # 데이터 프레임으로 변환
-df = pd.DataFrame(data)
+entire_list = pd.DataFrame(data)
 
 # Redshift에 연결 설정
-engine = PostgresHook(postgres_conn_id='AWS_Redshift').get_sqlalchemy_engine()
+engine = PostgresHook(postgres_conn_id="AWS_Redshift").get_sqlalchemy_engine()
 engine.execute("DROP VIEW IF EXISTS mart_data.rainfall_data_local_summary_final CASCADE;")
 engine.execute("DROP VIEW IF EXISTS mart_data.rainfall_data_local_summary CASCADE;")
 
 # 데이터 프레임을 Redshift 테이블로 로드
-df.to_sql(name='sido_mapping', schema='raw_data', con=engine, index=False, if_exists='replace')
+entire_list.to_sql(name="sido_mapping", schema="raw_data", con=engine, index=False, if_exists="replace")
 
 # Redshift SQL 쿼리 실행
 query = """

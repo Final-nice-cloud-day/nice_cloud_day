@@ -1,10 +1,10 @@
-from airflow.exceptions import AirflowException
+import logging
+
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from botocore.exceptions import ClientError
 
-import logging
 
-def upload_to_s3(s3_conn_id, s3_bucket, s3_key, local_files_to_upload, replace):
+def upload_to_s3(s3_conn_id: str, s3_bucket: str, s3_key: str, local_files_to_upload: list, replace: bool) -> None:
     """
     Upload all of the files to S3
     """
@@ -16,7 +16,7 @@ def upload_to_s3(s3_conn_id, s3_bucket, s3_key, local_files_to_upload, replace):
 
         dest_key = s3_key.replace("_DATE", "_" + target_date)
 
-        logging.info("Saving {} to {} in S3".format(file, dest_key))
+        logging.info(f"Saving {file} to {dest_key} in S3")
         s3_hook.load_file(
             filename=file,
             key=dest_key,
@@ -24,13 +24,13 @@ def upload_to_s3(s3_conn_id, s3_bucket, s3_key, local_files_to_upload, replace):
             replace=replace
         )
 
-def download_from_s3(s3_conn_id, s3_bucket, s3_key, download_path):
+def download_from_s3(s3_conn_id: str, s3_bucket: str, s3_key: str, download_path: str) -> None:
     """
     Download the file in S3
     """
     s3_hook = S3Hook(s3_conn_id)
     dest_key = s3_key
-    logging.info("Downloading {} to {} in S3".format(dest_key, download_path))
+    logging.info(f"Downloading {dest_key} to {download_path} in S3")
 
     try:
         downloaded_path = s3_hook.download_file(
