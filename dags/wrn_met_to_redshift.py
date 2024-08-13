@@ -27,7 +27,7 @@ def special_weather_to_s3(**kwargs) -> None:
     start_date = pendulum.parse(kwargs["ds"], tz=kst)
     end_date = start_date.add(days=1)
     api_url = "https://apihub-org.kma.go.kr/api/typ01/url/wrn_met_data.php?"
-    api_key = "SVszY16IQS6bM2NeiIEu4Q"
+    api_key = "S8g2FNXUR3qINhTV1Bd6mw"
     s3_hook = S3Hook(aws_conn_id="AWS_S3")
     bucket_name = "team-okky-1-bucket"
 
