@@ -1,3 +1,4 @@
+import os
 import logging
 
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -8,9 +9,23 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from sqlalchemy import create_engine
 
+def write_variable_to_local_file(variable_name, local_file_path):
+    content = Variable.get(variable_name)
+    f = open(local_file_path, "w")
+    f.write(content)
+    f.close()
+
+# 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
+def get_absolute_path(relative_path):
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(dir_path, relative_path)
+
 # Google Sheets API 설정
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name('/opt/airflow/include/de3-practice-lakestar77-credentials.json', scope)
+gs_json_file_path = get_absolute_path('./de3-practice-lakestar77-credentials.json')
+write_variable_to_local_file('gsheet_access_token', gs_json_file_path)
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(gs_json_file_path, scope)
 client = gspread.authorize(creds)
 
 # Google Sheets에서 데이터 가져오기
