@@ -10,7 +10,7 @@ def get_absolute_path(relative_path: str) -> str:
     return os.path.join(dir_path, relative_path)
 
 # 위도와 경도 변환 함수
-def conversion(old: str):
+def conversion(old: str) -> float:
     split_count = 3
     try:
         new = old.split("-")
