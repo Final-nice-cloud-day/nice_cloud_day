@@ -1,6 +1,7 @@
 import os
 import logging
 
+from airflow.models import Variable
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 import gspread
