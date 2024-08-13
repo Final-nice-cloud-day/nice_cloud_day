@@ -12,7 +12,7 @@ import requests
 def create_url(current_date: str) -> tuple[str, dict]:
     url = "https://www.safetydata.go.kr"
     dataname = "/V2/api/DSSP-IF-00247"
-    servicekey = "H0NCZD5N2HN4CZLW"
+    servicekey = os.getenv("API_key")
     payloads = {
         "serviceKey": servicekey,
         "returnType": "json",
