@@ -618,3 +618,7 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,visualstudio,python,venv
+
+# gsheet token
+!include
+include/de3-practice-lakestar77-credentials.json
