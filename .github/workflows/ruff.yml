@@ -19,4 +19,4 @@ jobs:
           pip install ruff
       # Update output format to enable automatic inline annotations.
       - name: Run Ruff
-        run: ruff check dags/ lambda/ --config ./ruff.toml --output-format=github
+        run: ruff check dags/ lambda/ --config ./ruff-lint.toml --output-format=github
