@@ -8,14 +8,14 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from oauth2client.service_account import ServiceAccountCredentials
 
 
-def write_variable_to_local_file(variable_name, local_file_path):
+def write_variable_to_local_file(variable_name: str, local_file_path: str) -> None:
     content = Variable.get(variable_name)
     f = open(local_file_path, "w")
     f.write(content)
     f.close()
 
 # 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
-def get_absolute_path(relative_path):
+def get_absolute_path(relative_path: str) -> str:
     dir_path = os.path.dirname(os.path.realpath(__file__))
     return os.path.join(dir_path, relative_path)
 
@@ -33,7 +33,7 @@ sheet = spreadsheet.worksheet("localname_list")
 data = sheet.get_all_records()
 
 # 데이터 프레임으로 변환
-df = pd.DataFrame(data)
+entire_list = pd.DataFrame(data)
 
 # Redshift에 연결 설정
 engine = PostgresHook(postgres_conn_id="AWS_Redshift").get_sqlalchemy_engine()
@@ -41,7 +41,7 @@ engine.execute("DROP VIEW IF EXISTS mart_data.rainfall_data_local_summary_final 
 engine.execute("DROP VIEW IF EXISTS mart_data.rainfall_data_local_summary CASCADE;")
 
 # 데이터 프레임을 Redshift 테이블로 로드
-df.to_sql(name="sido_mapping", schema="raw_data", con=engine, index=False, if_exists="replace")
+entire_list.to_sql(name="sido_mapping", schema="raw_data", con=engine, index=False, if_exists="replace")
 
 # Redshift SQL 쿼리 실행
 query = """

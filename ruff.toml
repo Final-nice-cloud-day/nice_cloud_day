@@ -52,7 +52,7 @@ target-version = "py310"
 # Ruff-specific rules: RUF
 
 select = ["F", "E", "W", "C90", "AIR", "Q", "I001", "I002", "PD002", "PD003", "PD004", "PD015", "PD901", "N", "UP", "ANN001", "ANN201", "ANN202", "S105", "S110", "S112", "A", "B", "ICN", "PLR2004"]
-ignore = ["F404", "F405"]
+ignore = ["F404", "F405", "E501"]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]

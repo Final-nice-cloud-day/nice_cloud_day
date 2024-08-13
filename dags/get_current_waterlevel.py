@@ -17,7 +17,7 @@ from plugins import s3
 
 
 # 현재 파일의 절대 경로를 기반으로 상대 경로를 절대 경로로 변환
-def get_absolute_path(relative_path):
+def get_absolute_path(relative_path: str) -> str:
     dir_path = os.path.dirname(os.path.realpath(__file__))
     return os.path.join(dir_path, relative_path)
 
@@ -87,7 +87,7 @@ dag = DAG(
     template_searchpath=[f"{include_dir}"],
 )
 
-def copy_to_s3(**context):
+def copy_to_s3(**context) -> None:
     table = context["params"]["table"]
     s3_key = context["params"]["s3_key"]
     flag = context["params"]["flag"]
@@ -109,7 +109,7 @@ def copy_to_s3(**context):
     s3.upload_to_s3(s3_conn_id, s3_bucket, s3_key, local_files_to_upload, replace)
 
 
-def get_entire_stream_list(**context):
+def get_entire_stream_list(**context) -> None:
     url = f"""https://api.hrfco.go.kr/{Variable.get('water_api_key')}/waterlevel/info.json"""
     response = requests.get(url)
     data = json.loads(response.text)
@@ -134,7 +134,7 @@ def get_entire_stream_list(**context):
         writer.writerows(id_data_reshape)
 
 
-def read_csv_file(file_path):
+def read_csv_file(file_path: str) -> list:
     with open(file_path, encoding="utf-8") as file:
         csv_reader = csv.reader(file)
         next(csv_reader)  # 헤더 건너뛰기
@@ -142,18 +142,17 @@ def read_csv_file(file_path):
         id_list = [row[0] for row in csv_reader]
         return id_list
 
-def convert_date_pair(dates, now):
+def convert_date_pair(dates: any, now: str) -> list:
     date_pair = []
     curr_end_date = now.format("YYYYMMDD")
 
     if not dates:
-        # 현재 달의 첫날
+        # 현재 달의 첫날convert_water_level_summary_table
         start_date = now.set(day=1).format("YYYYMMDD")
         date_pair = [(start_date, curr_end_date, start_date[:6])]
     else:
         for year in dates:
             try:
-                year_int = int(year)
                 start_date = f"{year}0101"
                 end_date = f"{year}1231"
                 end_date = pendulum.from_format(end_date, "YYYYMMDD").date()
@@ -174,7 +173,7 @@ def convert_date_pair(dates, now):
 
     return date_pair
 
-def insert_history_time(record, now, today):
+def insert_history_time(record: list, now: str, today: str) -> list:
     # 새로운 데이터를 저장할 리스트
     obs_id, obs_date, water_level, flow = record
 
@@ -195,7 +194,7 @@ def insert_history_time(record, now, today):
 
     return new_record
 
-def get_entire_stream_waterlevel_list(**kwargs):
+def get_entire_stream_waterlevel_list(**kwargs) -> list:
     entire_list = [["obs_id", "obs_date", "water_level", "flow", "data_key", "created_at", "updated_at"]]
     row = read_csv_file(f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}")
 
@@ -228,15 +227,15 @@ def get_entire_stream_waterlevel_list(**kwargs):
         dates = [date_pair[0][2],]
 
     for date in date_pair:
-        for id in row:
-            url = f"""https://api.hrfco.go.kr/{Variable.get('water_api_key')}/waterlevel/list/1D/{id}/{date[0]}/{date[1]}.json"""
+        for code in row:
+            url = f"""https://api.hrfco.go.kr/{Variable.get('water_api_key')}/waterlevel/list/1D/{code}/{date[0]}/{date[1]}.json"""
             response = requests.get(url)
             data = json.loads(response.text)
 
             try:
                 elements = data["content"]
             except KeyError: # 철원군(삼합교)의 경우 데이터 수집되고 있지 않음
-                logging.warning(f"{id}: {data}")
+                logging.warning(f"{code}: {data}")
                 continue
 
             for element in elements:
@@ -257,20 +256,20 @@ def get_entire_stream_waterlevel_list(**kwargs):
 
     return dates
 
-def get_associate_stream_list(**context):
+def get_associate_stream_list(**context) -> None:
     entire_list = [["obs_id", "river", "rel_river", "opened_at", "first_at", "last_at"]]
     row = read_csv_file(f"{get_absolute_path('../data/waterlevel/extracted_id_list.csv')}")
 
-    for id in row:
-        url = f"""http://www.wamis.go.kr:8080/wamis/openapi/wkw/wl_obsinfo?obscd={id}&output=json"""
+    for code in row:
+        url = f"""http://www.wamis.go.kr:8080/wamis/openapi/wkw/wl_obsinfo?obscd={code}&output=json"""
         response = requests.get(url)
         data = json.loads(response.text)
         missing_cnt = 0
 
         try:
             elements = data["list"][0]
-        except:
-            logging.warning(f"{id}: {data}")
+        except KeyError:
+            logging.warning(f"{code}: {data}")
             missing_cnt += 1
             continue
 
@@ -284,32 +283,32 @@ def get_associate_stream_list(**context):
         writer = csv.writer(file, quotechar = '"', quoting = csv.QUOTE_ALL)
         writer.writerows(entire_list)
 
-task1 = PythonOperator(
+collect_entire_stream_list = PythonOperator(
     task_id="collect_entire_stream_list",
     python_callable=get_entire_stream_list,
     dag=dag
 )
 
-task2 = PythonOperator(
+collect_associate_stream_list = PythonOperator(
     task_id="collect_associate_stream_list",
     python_callable=get_associate_stream_list,
     dag=dag
 )
 
-task3 = BashOperator(
+join_stream_info_list = BashOperator(
     task_id="join_stream_info_list",
     bash_command=f"python3 {get_absolute_path('../include/join_waterlevel_csv_file.py')}",
     dag=dag
 )
 
-task4 = PythonOperator(
+collect_entire_stream_level_list = PythonOperator(
     task_id="collect_entire_stream_level_list",
     python_callable=get_entire_stream_waterlevel_list,
     provide_context=True,
     dag=dag
 )
 
-task5 = SQLExecuteQueryOperator(
+table_setting_in_redshfit = SQLExecuteQueryOperator(
     task_id = "table_setting_in_redshfit",
     conn_id = redshift_conn_id,
     sql = f"""
@@ -322,7 +321,7 @@ task5 = SQLExecuteQueryOperator(
     dag = dag
 )
 
-task6_1 = PythonOperator(
+copy_water_level_info_to_s3 = PythonOperator(
     task_id = "copy_{}_to_s3".format(tables_info[0]["table_name"]),
     python_callable = copy_to_s3,
     params = {
@@ -333,7 +332,7 @@ task6_1 = PythonOperator(
     dag = dag
 )
 
-task6_2 = PythonOperator(
+copy_water_level_data_to_s3 = PythonOperator(
     task_id = "copy_{}_to_s3".format(tables_info[1]["table_name"]),
     python_callable = copy_to_s3,
     provide_context=True,
@@ -345,7 +344,7 @@ task6_2 = PythonOperator(
     dag = dag
 )
 
-task7_1 = S3ToRedshiftOperator(
+run_copy_sql_water_level_info = S3ToRedshiftOperator(
     task_id = "run_copy_sql_{}".format(tables_info[0]["table_name"]),
     s3_bucket = s3_bucket,
     s3_key = f"""waterlevel/info/{tables_info[0]["table_name"]}.csv""",
@@ -360,7 +359,7 @@ task7_1 = S3ToRedshiftOperator(
     dag = dag
 )
 
-task7_2 = S3ToRedshiftOperator(
+run_copy_sql_water_level_data = S3ToRedshiftOperator(
     task_id = "run_copy_sql_{}".format(tables_info[1]["table_name"]),
     s3_bucket = s3_bucket,
     s3_key = f"""waterlevel/{tables_info[1]["table_name"]}_""",
@@ -374,7 +373,7 @@ task7_2 = S3ToRedshiftOperator(
     dag = dag
 )
 
-task8 = SQLExecuteQueryOperator(
+convert_water_level_summary_table = SQLExecuteQueryOperator(
     task_id = "convert_water_level_summary_table",
     conn_id = redshift_conn_id,
     sql = "convert_water_level_summary_table.sql",
@@ -384,4 +383,10 @@ task8 = SQLExecuteQueryOperator(
     dag = dag
 )
 
-task1 >> task2 >> task3 >> task4 >> task5 >> task6_1 >> task6_2 >> task7_1 >> task7_2 >> task8
+collect_entire_stream_list >> collect_associate_stream_list \
+>> join_stream_info_list >> collect_entire_stream_level_list \
+>> table_setting_in_redshfit \
+>> copy_water_level_info_to_s3 >> copy_water_level_data_to_s3 \
+>> run_copy_sql_water_level_info >> run_copy_sql_water_level_data \
+>> convert_water_level_summary_table
+

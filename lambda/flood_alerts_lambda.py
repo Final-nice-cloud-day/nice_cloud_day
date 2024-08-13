@@ -2,10 +2,14 @@ import io
 import json
 import os
 import urllib.request
+from http import HTTPStatus
+from typing import Any
 
 import boto3
 import pandas as pd
 import pendulum
+from aws_lambda_typing import context as context_
+from aws_lambda_typing import events
 
 # Initialize S3 client
 s3_client = boto3.client("s3", region_name="ap-northeast-2")
@@ -19,23 +23,23 @@ api_key = os.environ["API_KEY"]
 api_url_template = f"https://api.hrfco.go.kr/{api_key}/fldfct/list/{{}}.json"
 latest_api_url = f"https://api.hrfco.go.kr/{api_key}/fldfct/list.json"
 
-def fetch_data(url):
+def fetch_data(url: str) -> Any:
     try:
         with urllib.request.urlopen(url) as response:
-            if response.status == 200:
+            if response.status == HTTPStatus.OK:
                 return json.loads(response.read().decode())
     except Exception as e:
         print(f"Error fetching data from {url}: {e}")
     return None
 
-def get_data_for_date(edt):
+def get_data_for_date(edt: str) -> Any:
     url = api_url_template.format(edt)
     return fetch_data(url)
 
-def get_latest_data():
+def get_latest_data() -> Any:
     return fetch_data(latest_api_url)
 
-def get_latest_s3_data_prefix():
+def get_latest_s3_data_prefix() -> Any:
     response = s3_client.list_objects_v2(Bucket=s3_bucket_name, Prefix=s3_root_folder + "/", Delimiter="/")
     if "CommonPrefixes" in response:
         prefixes = [prefix["Prefix"].replace(s3_root_folder + "/", "").strip("/") for prefix in response["CommonPrefixes"]]
@@ -43,7 +47,7 @@ def get_latest_s3_data_prefix():
             return max(prefixes)
     return None
 
-def accumulate_data(since_date):
+def accumulate_data(since_date: str) -> list:
     accumulated_data = []
     seen_pairs = set()
     current_date = pendulum.from_format(since_date, "YYYYMMDD")
@@ -62,7 +66,7 @@ def accumulate_data(since_date):
 
     return accumulated_data
 
-def save_data_to_s3(df, date, ancnm):
+def save_data_to_s3(df: pd.DataFrame, date: str, ancnm: str) -> None:
     base_dir = "/tmp/flood_forecast_data"
     os.makedirs(base_dir, exist_ok=True)
 
@@ -77,32 +81,32 @@ def save_data_to_s3(df, date, ancnm):
     s3_client.upload_file(file_path, s3_bucket_name, s3_key)
     print(f"Uploaded {file_path} to s3://{s3_bucket_name}/{s3_key}")
 
-def save_data_by_date_and_ancnm(data):
+def save_data_by_date_and_ancnm(data: Any) -> None:
     if not data:
         print("No data to save")
         return
 
-    df = pd.DataFrame(data)
-    if "ancdt" not in df.columns:
+    entire_data = pd.DataFrame(data)
+    if "ancdt" not in entire_data.columns:
         print("Error: 'ancdt' column is missing from data")
         return
 
-    for date, group in df.groupby(df["ancdt"].str[:8]):
+    for date, group in entire_data.groupby(entire_data["ancdt"].str[:8]):
         for ancnm, subgroup in group.groupby("ancnm"):
             save_data_to_s3(subgroup, date, ancnm)
 
-def get_previous_alerts():
+def get_previous_alerts() -> Any:
     response = s3_client.list_objects_v2(Bucket=s3_bucket_name, Prefix=s3_root_folder + "/", Delimiter="/")
     if "Contents" in response:
         latest_file = max(response["Contents"], key=lambda x: x["LastModified"])
         latest_file_key = latest_file["Key"]
         s3_object = s3_client.get_object(Bucket=s3_bucket_name, Key=latest_file_key)
         file_content = s3_object["Body"].read().decode("utf-8")
-        df = pd.read_csv(io.StringIO(file_content))
-        return df.to_dict("records")
+        entire_data = pd.read_csv(io.StringIO(file_content))
+        return entire_data.to_dict("records")
     return []
 
-def get_sent_alerts():
+def get_sent_alerts() -> Any:
     try:
         s3_object = s3_client.get_object(Bucket=s3_bucket_name, Key=f"{s3_root_folder}/sent_alerts.json")
         file_content = s3_object["Body"].read().decode("utf-8")
@@ -110,14 +114,14 @@ def get_sent_alerts():
     except s3_client.exceptions.NoSuchKey:
         return []
 
-def save_sent_alerts(sent_alerts):
+def save_sent_alerts(sent_alerts: str) -> None:
     s3_client.put_object(
         Bucket=s3_bucket_name,
         Key=f"{s3_root_folder}/sent_alerts.json",
         Body=json.dumps(sent_alerts, ensure_ascii=False).encode("utf-8")
     )
 
-def send_slack_message(alert):
+def send_slack_message(alert: dict) -> None:
     slack_webhook_url = os.environ["SLACK_WEBHOOK_URL"]
     message = {
         "text": f"*{alert['kind']}*\n"
@@ -134,10 +138,10 @@ def send_slack_message(alert):
     data = json.dumps(message, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(slack_webhook_url, data=data, headers={"Content-Type": "application/json"})
     response = urllib.request.urlopen(req)
-    if response.status != 200:
+    if response.status != HTTPStatus.OK:
         raise ValueError(f"Request to Slack returned an error {response.status}, the response is:\n{response.read().decode('utf-8')}")
 
-def process_alerts(data):
+def process_alerts(data: list) -> str:
     previous_alerts = get_previous_alerts() or []
     sent_alerts = get_sent_alerts() or []
 
@@ -157,7 +161,7 @@ def process_alerts(data):
     else:
         return "No new data to save and send message"
 
-def lambda_handler(event, context):
+def lambda_handler(event: events.EventBridgeEvent, context: context_.Context) -> dict:
     fetch_latest = event.get("fetch_latest", False)
 
     if fetch_latest:
@@ -177,6 +181,6 @@ def lambda_handler(event, context):
         result = "No new data to save"
 
     return {
-        "statusCode": 200,
+        "statusCode": HTTPStatus.OK,
         "body": result
     }
