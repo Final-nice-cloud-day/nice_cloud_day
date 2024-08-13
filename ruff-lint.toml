@@ -46,7 +46,23 @@ target-version = "py310"
 # Perflint: PERF
 # refurb: FURB
 # Ruff-specific rules: RUF
-select = ["F", "E", "W", "C90", "AIR", "Q", "I001", "I002", "PD002", "PD003", "PD004", "PD015", "PD901", "N", "UP", "ANN001", "ANN201", "ANN202", "S105", "S110", "S112", "A", "B", "ICN", "PLR2004"]
+select = [
+    "F",
+    "E",
+    "W",
+    "C",
+    "AIR",
+    "ICN",
+    "Q",
+    "I001", "I002",
+    "PD002", "PD003", "PD004", "PD015", "PD901",
+    "N802", "N803", "N806", "N807", "N818", "N999",
+    "UP032", "UP034",
+    "ANN001", "ANN201", "ANN202",
+    "S105", "S110", "S112",
+    "A001",
+    "B025",
+    "PLR2004"]
 ignore = ["F404", "F405", "E501"]
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
