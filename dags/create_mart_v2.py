@@ -1,36 +1,37 @@
-from airflow import DAG
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.operators.python_operator import PythonOperator
-from airflow.sensors.external_task_sensor import ExternalTaskSensor
 import logging
+
 import pendulum
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.sensors.external_task_sensor import ExternalTaskSensor
 
 kst = pendulum.timezone("Asia/Seoul")  # 스케줄링을 한국 시간 기준으로 하기 위해서 설정
 
 # 기본 DAG 설정
 default_args = {
-    'owner': 'bongho',
-    'depends_on_past': True,
-    'start_date': pendulum.datetime(2024, 8, 5, 6, 0, 0, tz=kst),
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': pendulum.duration(minutes=5)
+    "owner": "bongho",
+    "depends_on_past": True,
+    "start_date": pendulum.datetime(2024, 8, 5, 6, 0, 0, tz=kst),
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 1,
+    "retry_delay": pendulum.duration(minutes=5)
 }
 
 dag = DAG(
-    'Create_mart_table_fcst_shrt_v2',
+    "Create_mart_table_fcst_shrt_v2",
     default_args=default_args,
-    description='단기 육상 예보 마트 테이블 생성 (적재하는 방식으로)',
-    schedule_interval='0 6,12,18 * * *',
+    description="단기 육상 예보 마트 테이블 생성 (적재하는 방식으로)",
+    schedule_interval="0 6,12,18 * * *",
     catchup=True,
     dagrun_timeout=pendulum.duration(hours=2),
-    tags=['단기', 'Daliy', '3time', 'mart_data']
+    tags=["단기", "Daliy", "3time", "mart_data"]
 )
 
-def mart_fcst_shrt_close_time():
+def mart_fcst_shrt_close_time() -> None:
     logging.info("Redshift 마트 테이블 적재 시작")
-    redshift_hook = PostgresHook(postgres_conn_id='AWS_Redshift')
+    redshift_hook = PostgresHook(postgres_conn_id="AWS_Redshift")
     conn = redshift_hook.get_conn()
     cursor = conn.cursor()
 
@@ -54,9 +55,9 @@ def mart_fcst_shrt_close_time():
         );
         """)
         logging.info("임시 테이블 생성 성공 : temp_fcst_shrt_mart")
-        
+
         cursor.execute("TRUNCATE TABLE temp_fcst_shrt_mart;")
-        
+
         # 임시 테이블에 데이터 넣기 (온도 -99 데이터 삭제 포함)
         insert_temp_table = """
         INSERT INTO temp_fcst_shrt_mart (
@@ -74,7 +75,7 @@ def mart_fcst_shrt_close_time():
         created_at,
         updated_at
         )
-        SELECT 
+        SELECT
             t1.reg_id,
             CASE
                 WHEN (t1.reg_id LIKE '11B10101') THEN '서울특별시'
@@ -97,14 +98,14 @@ def mart_fcst_shrt_close_time():
                 WHEN (t1.reg_id LIKE '11H20%') THEN '경상남도'
                 ELSE '북한'
             END AS doname,
-            t2.reg_name, 
-            t1.tm_fc, 
-            t1.tm_ef, 
-            t1.ta, 
-            t1.rn_st, 
-            t1.wf_pre_cd, 
+            t2.reg_name,
+            t1.tm_fc,
+            t1.tm_ef,
+            t1.ta,
+            t1.rn_st,
+            t1.wf_pre_cd,
             t1.wf_info,
-            t3.iso_3166_code, 
+            t3.iso_3166_code,
             t1.data_key,
             t1.created_at,
             t1.updated_at
@@ -126,12 +127,12 @@ def mart_fcst_shrt_close_time():
         WHERE reg_id = '11B20702';
         """)
         logging.info("경기도 광주 ISO-3166 코드 매핑 제거 완료")
-        
+
         merge_query = """
         MERGE INTO mart_data.fcst_shrt_mart_st
         USING temp_fcst_shrt_mart AS source
-            ON mart_data.fcst_shrt_mart_st.reg_id = source.reg_id 
-            AND mart_data.fcst_shrt_mart_st.tm_fc = source.tm_fc 
+            ON mart_data.fcst_shrt_mart_st.reg_id = source.reg_id
+            AND mart_data.fcst_shrt_mart_st.tm_fc = source.tm_fc
             AND mart_data.fcst_shrt_mart_st.tm_ef = source.tm_ef
             and mart_data.fcst_shrt_mart_st.data_key = source.data_key
         WHEN MATCHED THEN
@@ -171,25 +172,25 @@ def mart_fcst_shrt_close_time():
         logging.info("모든 작업이 성공적으로 완료되었습니다.")
 
 wait_for_fct_shrt_reg_to_s3_redshift = ExternalTaskSensor(
-    task_id='wait_for_fct_shrt_reg_to_s3_redshift',
-    external_dag_id='fct_shrt_reg_to_s3_redshift',
+    task_id="wait_for_fct_shrt_reg_to_s3_redshift",
+    external_dag_id="fct_shrt_reg_to_s3_redshift",
     external_task_id=None,
     check_existence=True,
     dag=dag,
 )
 
 wait_for_fct_afs_dl_to_s3_redshift = ExternalTaskSensor(
-    task_id='wait_for_fct_afs_dl_to_s3_redshift',
-    external_dag_id='fct_afs_dl_to_s3_redshift',
+    task_id="wait_for_fct_afs_dl_to_s3_redshift",
+    external_dag_id="fct_afs_dl_to_s3_redshift",
     external_task_id=None,
     check_existence=True,
     dag=dag,
 )
 
-execute_sql_task = PythonOperator(
-    task_id='execute_sql',
+execute_sql = PythonOperator(
+    task_id="execute_sql",
     python_callable=mart_fcst_shrt_close_time,
     dag=dag,
 )
 
-[wait_for_fct_shrt_reg_to_s3_redshift, wait_for_fct_afs_dl_to_s3_redshift] >> execute_sql_task
+[wait_for_fct_shrt_reg_to_s3_redshift, wait_for_fct_afs_dl_to_s3_redshift] >> execute_sql
