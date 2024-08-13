@@ -26,20 +26,15 @@ def conversion(old: str) -> float:
 
 # 데이터 로드
 list_data = pd.read_csv(f"{get_absolute_path('../data/rainfall/list.csv')}", header=0)
-associate_data = pd.read_csv(
-    f"{get_absolute_path('../data/rainfall/associate_list.csv')}", header=0
-)
+associate_data = pd.read_csv(f"{get_absolute_path('../data/rainfall/associate_list.csv')}", header=0)
 
 # 각 셀의 양쪽 공백 제거
 list_data = list_data.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
-associate_data = associate_data.apply(lambda x: x.str.strip() if x.dtype == "object"
-                                        else x)
+associate_data = associate_data.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
 
 # first_at, last_at 컬럼 데이터 포맷 변환
-associate_data["first_at"] = pd.to_datetime(associate_data["first_at"], format="%Y%m%d",
-                                            errors="ignore")
-associate_data["last_at"] = pd.to_datetime(associate_data["last_at"], format="%Y%m%d",
-                                            errors="ignore")
+associate_data["first_at"] = pd.to_datetime(associate_data["first_at"], format="%Y%m%d", errors="ignore")
+associate_data["last_at"] = pd.to_datetime(associate_data["last_at"], format="%Y%m%d", errors="ignore")
 
 # 두 데이터프레임 병합
 merged_data = list_data.merge(associate_data, left_on="obs_id", right_on="obs_id")
