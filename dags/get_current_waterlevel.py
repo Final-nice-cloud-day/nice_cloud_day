@@ -147,7 +147,7 @@ def convert_date_pair(dates: any, now: str) -> list:
     curr_end_date = now.format("YYYYMMDD")
 
     if not dates:
-        # 현재 달의 첫날convert_water_level_summary_table
+        # 현재 달의 첫날
         start_date = now.set(day=1).format("YYYYMMDD")
         date_pair = [(start_date, curr_end_date, start_date[:6])]
     else:
