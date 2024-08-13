@@ -22,4 +22,4 @@ jobs:
           pip install ruff
       # Update output format to enable automatic inline annotations.
       - name: Run Ruff
-        run: ruff check ./dags/get_* ./dags/plugins/ ./include ./lambda/flood_*  --config ./ruff.toml --output-format=github .
+        run: ruff check ./dags/get_* ./dags/plugins/ ./include ./lambda/flood_*  --config ./ruff.toml --output-format=github
