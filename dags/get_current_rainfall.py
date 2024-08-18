@@ -264,7 +264,7 @@ def get_associate_rainfall_list(**context) -> None:
 
         try:
             elements = data["list"][0]
-        except KeyError:
+        except (KeyError, IndexError):
             print(f"{code}: {data}")
             missing_cnt += 1
             continue
