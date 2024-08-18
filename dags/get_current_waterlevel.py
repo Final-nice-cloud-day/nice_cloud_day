@@ -268,7 +268,7 @@ def get_associate_stream_list(**context) -> None:
 
         try:
             elements = data["list"][0]
-        except KeyError:
+        except (KeyError, IndexError):
             logging.warning(f"{code}: {data}")
             missing_cnt += 1
             continue
