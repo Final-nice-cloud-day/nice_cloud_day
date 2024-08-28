@@ -10,6 +10,7 @@ import pandas as pd
 import pendulum
 from aws_lambda_typing import context as context_
 from aws_lambda_typing import events
+from pandas.errors import EmptyDataError
 
 # Initialize S3 client
 s3_client = boto3.client("s3", region_name="ap-northeast-2")
@@ -102,8 +103,23 @@ def get_previous_alerts() -> Any:
         latest_file_key = latest_file["Key"]
         s3_object = s3_client.get_object(Bucket=s3_bucket_name, Key=latest_file_key)
         file_content = s3_object["Body"].read().decode("utf-8")
-        entire_data = pd.read_csv(io.StringIO(file_content))
-        return entire_data.to_dict("records")
+        
+        try:
+            entire_data = pd.read_csv(io.StringIO(file_content))
+            # NaN 값을 채움: 숫자형은 0으로, 문자열형은 빈 문자열로
+            entire_data = entire_data.fillna({
+                col: 0 if entire_data[col].dtype in ['float64', 'int64'] else ''
+                for col in entire_data.columns
+            })
+            return entire_data.to_dict("records")
+        except EmptyDataError:
+            # CSV 파일이 비어 있을 경우 빈 리스트를 반환
+            print("Warning: CSV file is empty.")
+            return []
+        except Exception as e:
+            # 그 외의 예외 처리
+            print(f"Error processing previous alerts: {e}")
+            return []
     return []
 
 def get_sent_alerts() -> Any:
